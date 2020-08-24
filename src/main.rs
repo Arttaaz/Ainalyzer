@@ -11,7 +11,7 @@ const VERTICAL_WIDGET_SPACING: f64 = 20.0;
 const WINDOW_TITLE: LocalizedString<RootState> = LocalizedString::new("AInalyzer!");
 
 #[derive(Debug, Clone, Data, PartialEq)]
-enum Player {
+pub enum Player {
     Black,
     White,
 }
@@ -54,8 +54,7 @@ fn build_root_widget() -> impl Widget<RootState> {
         .with_child(label)
         .with_spacer(VERTICAL_WIDGET_SPACING)
         .with_flex_child(Goban {
-                            stones: vec![Stone::black(Point::new(10.0, 10.0)), Stone::black(Point::new(9.0, 9.0)),
-                                         Stone::white(Point::new(10.0, 9.0)), Stone::white(Point::new(9.0, 10.0))],
+                            stones: vec![Stone::default(); 19*19 as usize],
                             hover: None,
                         }, 1.0)
         .with_spacer(VERTICAL_WIDGET_SPACING);
