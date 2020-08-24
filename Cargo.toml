@@ -8,5 +8,5 @@
 
 	[dependencies]
 	log = "0.4"
-	pretty_env_logger = "0.4"
+	scrub_log = "0.1.1"
 	druid = { git = "https://github.com/linebender/druid.git" }
