@@ -1,7 +1,6 @@
 use log::info;
 use druid::widget::{Flex, Label};
 use druid::{AppLauncher, Data, Env, Lens, LocalizedString, Widget, WindowDesc};
-use druid::Point;
 
 mod goban;
 use goban::Goban;

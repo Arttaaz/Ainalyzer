@@ -3,7 +3,7 @@ use druid::{Color, MouseButton};
 use druid::kurbo::{Line, Circle, Rect};
 use crate::Player;
 use std::collections::HashSet;
-use log::debug;
+//use log::debug;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Point {
@@ -58,16 +58,18 @@ impl Stone {
             Player::White => Color::WHITE,
         };
 
-        ctx.fill(Circle::new((rect.x0 + coord.x as f64 * size/20.0, rect.y0 + coord.y as f64 * size/20.0), size/41.8), &color);
-        ctx.stroke(Circle::new((rect.x0 + coord.x as f64 * size/20.0, rect.y0 + coord.y as f64 * size/20.0), size/41.8), &Color::BLACK, 1.0);
+        ctx.fill(Circle::new((rect.x0 + (coord.x+1) as f64 * size/20.0, rect.y0 + (coord.y+1) as f64 * size/20.0), size/41.8), &color);
+        ctx.stroke(Circle::new((rect.x0 + (coord.x+1) as f64 * size/20.0, rect.y0 + (coord.y+1) as f64 * size/20.0), size/41.8), &Color::BLACK, 1.0);
     }
 
-    fn hover(&self, ctx: &mut PaintCtx, rect: &Rect, size: f64, coord: Point) { 
+    fn hover(&self, ctx: &mut PaintCtx, rect: &Rect, size: f64, coord: Point) {
         match self.color {
-            Player::Black => ctx.fill(Circle::new((rect.x0 + coord.x as f64 * size/20.0, rect.y0 + coord.y as f64 * size/20.0), size/41.8), &Color::BLACK.with_alpha(0.7)),
-            Player::White => ctx.fill(Circle::new((rect.x0 + coord.x as f64 * size/20.0, rect.y0 + coord.y as f64 * size/20.0), size/41.8), &Color::WHITE.with_alpha(0.7)),
+            Player::Black =>
+                ctx.fill(Circle::new((rect.x0 + (coord.x+1) as f64 * size/20.0, rect.y0 + (coord.y+1) as f64 * size/20.0), size/41.8), &Color::BLACK.with_alpha(0.7)),
+            Player::White =>
+                ctx.fill(Circle::new((rect.x0 + (coord.x+1) as f64 * size/20.0, rect.y0 + (coord.y+1) as f64 * size/20.0), size/41.8), &Color::WHITE.with_alpha(0.7)),
         }
-        ctx.stroke(Circle::new((rect.x0 + coord.x as f64 * size/20.0, rect.y0 + coord.y as f64 * size/20.0), size/41.8), &Color::BLACK, 1.0);
+        ctx.stroke(Circle::new((rect.x0 + (coord.x+1) as f64 * size/20.0, rect.y0 + (coord.y+1) as f64 * size/20.0), size/41.8), &Color::BLACK, 1.0);
     }
 }
 
@@ -95,11 +97,10 @@ impl Widget<crate::RootState> for Goban {
                     let rect = Rect::from_origin_size((0.0,0.0), size).contained_rect_with_aspect_ratio(1.0);
                     let size = rect.height();
                     let mut pos = mouse_event.pos;
-                    pos.x = ((pos.x - rect.x0) / (size/20.0)).round();
-                    pos.y = ((pos.y - rect.y0) / (size/20.0)).round();
+                    pos.x = ((pos.x - rect.x0) / (size/20.0)).round() - 1.0;
+                    pos.y = ((pos.y - rect.y0) / (size/20.0)).round() - 1.0;
                     let pos = Point::new(pos.x as u32, pos.y as u32);
-                    if pos.x > 0 && pos.y > 0 &&
-                       pos.x < 20 && pos.y < 20 {
+                    if pos.x < 19 && pos.y < 19 {
                        self.hover = match data.turn {
                             Player::Black => Some((pos, Stone::black())),
                             Player::White => Some((pos, Stone::white())),
@@ -113,40 +114,42 @@ impl Widget<crate::RootState> for Goban {
                 ctx.request_paint();
             },
             Event::MouseUp(mouse_event) => {
-                if self.hover.is_some() {
-                    let (p, s) = self.hover.as_ref().unwrap().clone();
-                    if mouse_event.button == MouseButton::Left && !self.stones[p.x as usize * 20 + p.y as usize].visible {
-                        self.stones[p.x as usize * 20 + p.y as usize] = s;
-                        self.hover = None;
+                if ctx.is_hot(){
+                    if self.hover.is_some() {
+                        let (p, s) = self.hover.as_ref().unwrap().clone();
+                        if mouse_event.button == MouseButton::Left && !self.stones[self.coord_to_idx(p)].visible {
+                            let point = self.coord_to_idx(p);
+                            self.stones[point] = s;
+                            self.hover = None;
 
-                        let mut opponent_died = false;
-                        let groups = self.find_groups();
-                        let dead_groups = groups.iter().filter(|g| {
-                            if g.liberties == 0 {
-                                if g.team != data.turn {
-                                    opponent_died = true;
+                            let mut opponent_died = false;
+                            let groups = self.find_groups();
+                            let dead_groups = groups.iter().filter(|g| {
+                                if g.liberties == 0 {
+                                    if g.team != data.turn {
+                                        opponent_died = true;
+                                    }
+                                    true
+                                } else {
+                                    false
                                 }
-                                true
-                            } else {
-                                false
-                            }
-                        }).collect::<Vec<_>>();
+                            }).collect::<Vec<_>>();
 
-                        dead_groups.iter().for_each(|g| {
-                            if opponent_died && g.team != data.turn {
-                                for p in &g.stones {
-                                    let i = self.coord_to_idx(*p);
-                                    self.stones[i] = Stone::default();
-                                    //add to captures
+                            dead_groups.iter().for_each(|g| {
+                                if opponent_died && g.team != data.turn {
+                                    for p in &g.stones {
+                                        let i = self.coord_to_idx(*p);
+                                        self.stones[i] = Stone::default();
+                                        //add to captures
+                                    }
+                                } else if !opponent_died && g.team == data.turn {
+                                self.stones[point] = Stone::default();
                                 }
-                            } else if !opponent_died && g.team == data.turn {
-                               self.stones[p.x as usize * 20 + p.y as usize] = Stone::default(); 
-                            } 
-                        });
-                        
-                        
-                        data.turn.next();
-                        ctx.request_paint();
+                            });
+
+                            data.turn.next();
+                            ctx.request_paint();
+                        }
                     }
                 }
             }
@@ -163,7 +166,7 @@ impl Widget<crate::RootState> for Goban {
     }
 
     fn paint(&mut self, ctx: &mut PaintCtx, _data: &crate::RootState, _env: &Env) {
-        let rect = Rect::from(ctx.region().to_rect().contained_rect_with_aspect_ratio(1.0));
+        let rect = Rect::from(ctx.region().bounding_box().contained_rect_with_aspect_ratio(1.0));
 
         let size = rect.height();
         let fill_color = Color::rgb8(219, 185, 52);
@@ -211,13 +214,13 @@ impl Widget<crate::RootState> for Goban {
 
 impl Goban {
     fn idx_to_coord(&self, i: usize) -> Point {
-        Point::new(i as u32 / 20, i as u32 % 20)
+        Point::new(i as u32 / 19, i as u32 % 19)
     }
 
     fn coord_to_idx(&self, p: Point) -> usize {
-        p.x as usize * 20 + p.y as usize
+        p.x as usize * 19 + p.y as usize
     }
-    
+
     fn find_groups(&self) -> Vec<Group> {
         let mut stones = self.stones.iter().enumerate().filter_map(|(i,s)| {
             if s.visible {
@@ -226,7 +229,7 @@ impl Goban {
                 None
             }
         }).collect::<Vec<_>>();
-        
+
         let mut liberties = Vec::new();
         let mut stack = Vec::new();
         let mut seen = HashSet::new();
@@ -251,7 +254,7 @@ impl Goban {
                         stones.retain(|(x, _s)| {
                             *x != self.coord_to_idx(p)});
                     }
-                } 
+                }
             }
             let group = Group {
                 stones: group_stones.clone(),
@@ -274,7 +277,7 @@ impl Goban {
         [(-1, 0), (1, 0), (0, -1), (0, 1)]
             .iter()
             .filter_map(move |&(dx, dy)| {
-                if (x + dx) >= 1 && x + dx < 20 as i64 && (y + dy) >= 1 && y + dy < 20 as i64 {
+                if (x + dx) >= 0 && x + dx < 19 as i64 && (y + dy) >= 0 && y + dy < 19 as i64 {
                     Some(Point::new((x + dx) as u32, (y + dy) as u32))
                 } else {
                     None
