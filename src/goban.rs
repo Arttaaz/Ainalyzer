@@ -1,10 +1,10 @@
 use druid::widget::prelude::*;
-use druid::{Data, Color, KbKey, MouseButton};
+use druid::{Data, Color, HotKey, KbKey, MouseButton};
 use druid::kurbo::{Line, Circle, Rect};
 use crate::Player;
 use std::collections::HashSet;
 use std::sync::Arc;
-use log::debug;
+//use log::debug;
 
 #[derive(Debug, Clone, Data, Copy, PartialEq, Eq, Hash)]
 pub struct Point {
@@ -101,6 +101,7 @@ impl Default for Goban {
 
 impl Widget<crate::RootState> for Goban {
     fn event(&mut self, ctx: &mut EventCtx, event: &Event, data: &mut crate::RootState, _env: &Env) {
+        ctx.request_focus();
         match event {
             Event::MouseMove(mouse_event) => {
                 if ctx.is_hot() {
@@ -198,11 +199,10 @@ impl Widget<crate::RootState> for Goban {
                     self.next_state(ctx, data);
                 }
             },
-            Event::KeyUp(key_event) => { //apparently broken
-                debug!("HEY DUDE");
-                match &key_event.key {
-                    KbKey::ArrowLeft => self.previous_state(ctx, data),
-                    KbKey::ArrowRight => self.next_state(ctx, data),
+            Event::KeyUp(key_event) => {
+                match key_event {
+                    k_e if (HotKey::new(None, KbKey::ArrowLeft)).matches(k_e) => self.previous_state(ctx, data),
+                    k_e if (HotKey::new(None, KbKey::ArrowRight)).matches(k_e) => self.next_state(ctx, data),
                     _ => (),
                 }
             },
@@ -219,7 +219,7 @@ impl Widget<crate::RootState> for Goban {
     }
 
     fn paint(&mut self, ctx: &mut PaintCtx, _data: &crate::RootState, _env: &Env) {
-        let rect = Rect::from(ctx.region().bounding_box().contained_rect_with_aspect_ratio(1.0));
+        let rect = Rect::from(ctx.region().to_rect().contained_rect_with_aspect_ratio(1.0));
 
         let size = rect.height();
         let fill_color = Color::rgb8(219, 185, 52);
