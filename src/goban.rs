@@ -1,11 +1,12 @@
 use druid::widget::prelude::*;
-use druid::{Color, MouseButton};
+use druid::{Data, Color, KbKey, MouseButton};
 use druid::kurbo::{Line, Circle, Rect};
 use crate::Player;
 use std::collections::HashSet;
-//use log::debug;
+use std::sync::Arc;
+use log::debug;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Data, Copy, PartialEq, Eq, Hash)]
 pub struct Point {
     pub x: u32,
     pub y: u32,
@@ -87,6 +88,16 @@ pub struct Goban {
     pub ko: Option<Point>,
 }
 
+impl Default for Goban {
+    fn default() -> Self {
+        Self {
+            stones: vec![Stone::default(); 19*19 as usize],
+            hover: None,
+            last_move: None,
+            ko: None,
+        }
+    }
+}
 
 impl Widget<crate::RootState> for Goban {
     fn event(&mut self, ctx: &mut EventCtx, event: &Event, data: &mut crate::RootState, _env: &Env) {
@@ -156,8 +167,10 @@ impl Widget<crate::RootState> for Goban {
                                             self.ko = None;
                                         }
                                     }
+                                    let mut enemy_groups = Vec::new();
                                     dead_groups.iter().for_each(|g| {
                                         if g.team != data.turn {
+                                            enemy_groups.push(g.clone());
                                             for p in &g.stones {
                                                 let i = self.coord_to_idx(*p);
                                                 self.stones[i] = Stone::default();
@@ -165,6 +178,7 @@ impl Widget<crate::RootState> for Goban {
                                             }
                                         }
                                     });
+                                    Arc::make_mut(&mut data.history).push((point, enemy_groups));
                                     self.last_move = Some(p);
                                     self.hover = None;
                                     data.turn.next();
@@ -176,7 +190,22 @@ impl Widget<crate::RootState> for Goban {
                         }
                     }
                 }
-            }
+            },
+            Event::Wheel(mouse_event) => {
+                if mouse_event.wheel_delta.y < 0.0 {
+                    self.previous_state(ctx, data);
+                } else {
+                    self.next_state(ctx, data);
+                }
+            },
+            Event::KeyUp(key_event) => { //apparently broken
+                debug!("HEY DUDE");
+                match &key_event.key {
+                    KbKey::ArrowLeft => self.previous_state(ctx, data),
+                    KbKey::ArrowRight => self.next_state(ctx, data),
+                    _ => (),
+                }
+            },
             _ => (),
         }
     }
@@ -361,9 +390,90 @@ impl Goban {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct GameHistory {
+    history: Vec<(usize, Vec<Group>)>,
+    current_index: usize,
+}
 
+impl Default for GameHistory {
+    fn default() -> Self {
+        Self {
+            history: Vec::new(),
+            current_index: 0,
+        }
+    }
+}
 
+impl GameHistory {
+    fn push(&mut self, elem: (usize, Vec<Group>)) {
+        if self.current_index + 1 < self.history.len() {
+            let _ = self.history.split_off(self.current_index);
+        }
+        self.history.push(elem);
+        self.current_index += 1;
+    }
 
+    fn pop(&mut self) -> Option<(usize, Vec<Group>)> {
+        if self.current_index as isize - 1 >= 0 {
+            self.current_index -= 1;
+            Some(self.history[self.current_index].clone())
+        } else {
+            None
+        }
+    }
 
+    fn next(&mut self) -> Option<(Player, usize, Vec<Group>)> {
+        if self.current_index == self.history.len() {
+            None
+        } else {
+            let player = match self.current_index % 2 {
+                0 => Player::Black,
+                1 => Player::White,
+                _ => unreachable!(),
+            };
+            self.current_index += 1;
+            let (idx, dead_stones) = self.history[self.current_index-1].clone();
+            Some((player, idx, dead_stones))
+        }
+    }
+}
 
+impl Goban {
+    fn previous_state(&mut self, ctx: &mut EventCtx, data: &mut crate::RootState) {
+        if let Some((played_move, dead_stones)) = Arc::make_mut(&mut data.history).pop() {
+            let player = self.stones[played_move].color;
+            self.stones[played_move] = Stone::default();
+            for group in dead_stones {
+                for p in &group.stones {
+                    let i = self.coord_to_idx(*p);
+                    self.stones[i] = match player {
+                        Player::Black => Stone::white(),
+                        Player::White => Stone::black(),
+                    }
+                }
+            }
+            data.turn.next();
+            self.hover = None;
+            ctx.request_paint();
+        }
+    }
 
+    fn next_state(&mut self, ctx: &mut EventCtx, data: &mut crate::RootState) {
+        if let Some((player, played_move, dead_stones)) = Arc::make_mut(&mut data.history).next() {
+            self.stones[played_move] = match player {
+                Player::Black => Stone::black(),
+                Player::White => Stone::white(),
+            };
+            for group in dead_stones {
+                for p in &group.stones {
+                    let i = self.coord_to_idx(*p);
+                    self.stones[i] = Stone::default();
+                }
+            }
+            data.turn.next();
+            self.hover = None;
+            ctx.request_paint();
+        }
+    }
+}
