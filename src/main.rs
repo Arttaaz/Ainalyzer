@@ -9,7 +9,7 @@ const HORIZONTAL_WIDGET_SPACING: f64 = 0.1; // Flex factor
 const VERTICAL_WIDGET_SPACING: f64 = 20.0;
 const WINDOW_TITLE: LocalizedString<RootState> = LocalizedString::new("AInalyzer!");
 
-#[derive(Debug, Clone, Data, PartialEq)]
+#[derive(Debug, Clone, Copy, Data, PartialEq)]
 pub enum Player {
     Black,
     White,
@@ -55,6 +55,8 @@ fn build_root_widget() -> impl Widget<RootState> {
         .with_flex_child(Goban {
                             stones: vec![Stone::default(); 19*19 as usize],
                             hover: None,
+                            last_move: None,
+                            ko: None,
                         }, 1.0)
         .with_spacer(VERTICAL_WIDGET_SPACING);
 
