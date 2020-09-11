@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use log::info;
 use druid::widget::{Flex, Label};
-use druid::{AppLauncher, Data, Env, Lens, LocalizedString, Widget, WindowDesc};
+use druid::{AppLauncher, AppDelegate, Data, DelegateCtx, Event, Env, KbKey, KeyEvent, Lens, LocalizedString, Widget, WindowDesc, WindowId};
 
 mod goban;
 use goban::Goban;
@@ -33,6 +33,30 @@ struct RootState {
     pub history: Arc<Box<GameHistory>>,
 }
 
+struct Delegate {}
+
+impl AppDelegate<RootState> for Delegate {
+    fn event(&mut self, ctx: &mut DelegateCtx, _window_id: WindowId, event: Event, _data: &mut RootState, _env: &Env) -> Option<Event> {
+        match event.clone() {
+            Event::KeyUp(KeyEvent {
+                key: code,
+                ..
+            }) => match code {
+                KbKey::Character(s) if *s == "q".to_string() => {
+                    ctx.submit_command(druid::commands::QUIT_APP, druid::Target::Global);
+                    Some(event)
+                },
+                KbKey::Character(s) if *s == "o".to_string() => {
+                    ctx.submit_command(druid::Command::new(druid::commands::SHOW_OPEN_PANEL, druid::FileDialogOptions::default()), druid::Target::Global);
+                    Some(event)
+                }
+                _ => Some(event),
+            },
+            _ => Some(event),
+        }
+    }
+}
+
 fn main() {
     scrub_log::init().unwrap();
     info!("Starting the app");
@@ -42,6 +66,7 @@ fn main() {
         .window_size((1280.0, 720.0));
 
     AppLauncher::with_window(main_window)
+        .delegate(Delegate {})
         .launch(RootState{
             text: "AInalyzer".to_string(),
             turn: Player::Black,

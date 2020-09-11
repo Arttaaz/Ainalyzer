@@ -1,5 +1,5 @@
 use druid::widget::prelude::*;
-use druid::{Data, Color, HotKey, KbKey, MouseButton};
+use druid::{Data, Color, KeyEvent, KbKey, MouseButton};
 use druid::kurbo::{Line, Circle, Rect};
 use crate::Player;
 use std::collections::HashSet;
@@ -199,10 +199,13 @@ impl Widget<crate::RootState> for Goban {
                     self.next_state(ctx, data);
                 }
             },
-            Event::KeyUp(key_event) => {
-                match key_event {
-                    k_e if (HotKey::new(None, KbKey::ArrowLeft)).matches(k_e) => self.previous_state(ctx, data),
-                    k_e if (HotKey::new(None, KbKey::ArrowRight)).matches(k_e) => self.next_state(ctx, data),
+            Event::KeyUp(KeyEvent { 
+                key: code,
+                ..
+            }) => {
+                match code {
+                    KbKey::ArrowLeft => self.previous_state(ctx, data),
+                    KbKey::ArrowRight => self.next_state(ctx, data),
                     _ => (),
                 }
             },
