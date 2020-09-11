@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use log::info;
+use log::debug;
 use druid::widget::{Flex, Label};
 use druid::{AppLauncher, AppDelegate, Data, DelegateCtx, Event, Env, KbKey, KeyEvent, Lens, LocalizedString, Widget, WindowDesc, WindowId};
 
@@ -43,17 +44,29 @@ impl AppDelegate<RootState> for Delegate {
                 ..
             }) => match code {
                 KbKey::Character(s) if *s == "q".to_string() => {
-                    ctx.submit_command(druid::commands::QUIT_APP, druid::Target::Global);
+                    ctx.submit_command(druid::commands::QUIT_APP);
                     Some(event)
                 },
-                KbKey::Character(s) if *s == "o".to_string() => {
-                    ctx.submit_command(druid::Command::new(druid::commands::SHOW_OPEN_PANEL, druid::FileDialogOptions::default()), druid::Target::Global);
-                    Some(event)
-                }
+                /*I want the code to open files here but apparently it doesn't work when the
+                * command is sent here */
+                //KbKey::Character(s) if *s == "o".to_string() => {
+                //    ctx.submit_command(druid::Command::new(druid::commands::SHOW_OPEN_PANEL, druid::FileDialogOptions::new(), druid::Target::Auto));
+                //    debug!("hello");
+                //    Some(event)
+                //},
                 _ => Some(event),
             },
             _ => Some(event),
         }
+    }
+
+    fn command(&mut self, _ctx: &mut DelegateCtx, _target: druid::Target, cmd: &druid::Command, _data: &mut RootState, _env: &Env) -> bool {
+        if let Some(file) = cmd.get(druid::commands::OPEN_FILE) {
+            let sgf = std::fs::read_to_string(file.path()).expect("failed to load sgf");
+            let game = sgf_parser::parse(sgf.as_str());
+            debug!("{:?}", game);
+        }
+        false
     }
 }
 

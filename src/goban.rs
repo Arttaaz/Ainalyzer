@@ -199,13 +199,18 @@ impl Widget<crate::RootState> for Goban {
                     self.next_state(ctx, data);
                 }
             },
-            Event::KeyUp(KeyEvent { 
+            Event::KeyUp(KeyEvent {
                 key: code,
                 ..
             }) => {
                 match code {
                     KbKey::ArrowLeft => self.previous_state(ctx, data),
                     KbKey::ArrowRight => self.next_state(ctx, data),
+                    KbKey::Character(s) if *s == "o".to_string() => {
+                        let open_options = druid::FileDialogOptions::new()
+                            .allowed_types(vec![druid::FileSpec::new("sgf", &["sgf"])]);
+                        ctx.submit_command(druid::Command::new(druid::commands::SHOW_OPEN_PANEL, open_options, druid::Target::Auto));
+                    },
                     _ => (),
                 }
             },
@@ -221,8 +226,8 @@ impl Widget<crate::RootState> for Goban {
         bc.max()
     }
 
-    fn paint(&mut self, ctx: &mut PaintCtx, _data: &crate::RootState, _env: &Env) {
-        let rect = Rect::from(ctx.region().to_rect().contained_rect_with_aspect_ratio(1.0));
+    fn paint(&mut self, ctx: &mut PaintCtx, data: &crate::RootState, _env: &Env) {
+        let rect = Rect::from(ctx.region().bounding_box().contained_rect_with_aspect_ratio(1.0));
 
         let size = rect.height();
         let fill_color = Color::rgb8(219, 185, 52);
@@ -268,6 +273,18 @@ impl Widget<crate::RootState> for Goban {
         if self.ko.is_some() {
             let ko = self.ko.unwrap();
             ctx.stroke(Rect::from_center_size((rect.x0 + (ko.x+1) as f64 * size/20.0, rect.y0 + (ko.y+1) as f64 * size/20.0), (size/42.0, size/42.0)), &Color::BLACK, 1.5);
+        }
+
+        if self.last_move.is_some() {
+            let coord = self.last_move.unwrap();
+            match data.turn {
+                Player::Black =>
+                    ctx.stroke(
+                        Circle::new((rect.x0 + (coord.x+1) as f64 * size/20.0, rect.y0 + (coord.y+1) as f64 * size/20.0), size/60.0), &Color::BLACK, 3.0),
+                Player::White =>
+                    ctx.stroke(
+                        Circle::new((rect.x0 + (coord.x+1) as f64 * size/20.0, rect.y0 + (coord.y+1) as f64 * size/20.0), size/60.0), &Color::WHITE, 3.0),
+            }
         }
     }
 
@@ -458,6 +475,7 @@ impl Goban {
             }
             data.turn.next();
             self.hover = None;
+            self.last_move = Some(self.idx_to_coord(played_move));
             ctx.request_paint();
         }
     }
@@ -476,6 +494,7 @@ impl Goban {
             }
             data.turn.next();
             self.hover = None;
+            self.last_move = Some(self.idx_to_coord(played_move));
             ctx.request_paint();
         }
     }
