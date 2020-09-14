@@ -879,7 +879,7 @@ checksum = "f2f96b10ec2560088a8e76961b00d47107b3a625fecb76dedb29ee7ccbf98235"
 [[package]]
 name = "libgtp"
 version = "0.1.0"
-source = "git+https://github.com/arttaaz/libgtp.git#d4c25e4c1e985d56811602d9253d1d3aab8b5d3d"
+source = "git+https://github.com/arttaaz/libgtp.git#92bef90d09f356d752292d61b0db0c562bcbd313"
 dependencies = [
  "log",
  "scrub_log 0.2.1",
