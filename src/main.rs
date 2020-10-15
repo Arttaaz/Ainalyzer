@@ -6,7 +6,9 @@ use druid::{AppLauncher, AppDelegate, Data, DelegateCtx, Event, Env, KbKey, KeyE
 
 mod goban;
 use goban::Goban;
-use goban::GameHistory;
+
+mod history;
+use history::History;
 
 const HORIZONTAL_WIDGET_SPACING: f64 = 0.1; // Flex factor
 const VERTICAL_WIDGET_SPACING: f64 = 20.0;
@@ -31,10 +33,10 @@ impl Player {
 struct RootState {
     text: String,
     pub turn: Player,
-    pub history: Arc<Box<GameHistory>>,
+    pub history: Arc<Box<History>>,
 }
 
-struct Delegate {}
+struct Delegate;
 
 impl AppDelegate<RootState> for Delegate {
     fn event(&mut self, ctx: &mut DelegateCtx, _window_id: WindowId, event: Event, _data: &mut RootState, _env: &Env) -> Option<Event> {
@@ -60,10 +62,12 @@ impl AppDelegate<RootState> for Delegate {
         }
     }
 
-    fn command(&mut self, _ctx: &mut DelegateCtx, _target: druid::Target, cmd: &druid::Command, _data: &mut RootState, _env: &Env) -> bool {
+    fn command(&mut self, _ctx: &mut DelegateCtx, _target: druid::Target, cmd: &druid::Command, data: &mut RootState, _env: &Env) -> bool {
         if let Some(file) = cmd.get(druid::commands::OPEN_FILE) {
             let sgf = std::fs::read_to_string(file.path()).expect("failed to load sgf");
-            let game = sgf_parser::parse(sgf.as_str());
+            let game = sgf_parser::parse(sgf.as_str()).expect("failed to parse sgf");
+            //TODO: Build history tree from sgf
+            //data.history = Arc::new(Box::new(History {tree: game, current_node: game.iter().next().unwrap().clone()}));
             debug!("{:?}", game);
         }
         false
@@ -79,11 +83,11 @@ fn main() {
         .window_size((1280.0, 720.0));
 
     AppLauncher::with_window(main_window)
-        .delegate(Delegate {})
+        .delegate(Delegate)
         .launch(RootState{
             text: "AInalyzer".to_string(),
             turn: Player::Black,
-            history: Arc::new(Box::new(GameHistory::default())),
+            history: Arc::new(Box::new(History::default())),
         })
         .expect("failed to launch app");
 }
@@ -103,4 +107,3 @@ fn build_root_widget() -> impl Widget<RootState> {
         .with_flex_spacer(HORIZONTAL_WIDGET_SPACING)
 
 }
-

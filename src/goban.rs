@@ -73,7 +73,7 @@ impl Stone {
 }
 
 #[derive(Debug, Clone)]
-struct Group {
+pub struct Group {
     stones: Vec<Point>,
     liberties: u64,
     team: Player,
@@ -138,7 +138,7 @@ impl Widget<crate::RootState> for Goban {
                 ctx.request_paint();
             },
             Event::MouseUp(mouse_event) => {
-                if ctx.is_hot(){
+                if ctx.is_hot() {
                     if self.hover.is_some() {
                         let (p, s) = self.hover.as_ref().unwrap().clone();
                         if mouse_event.button == MouseButton::Left && !self.stones[self.coord_to_idx(p)].visible {
@@ -411,51 +411,23 @@ impl Goban {
 }
 
 #[derive(Debug, Clone)]
-pub struct GameHistory {
-    history: Vec<(usize, Vec<Group>)>,
-    current_index: usize,
+pub struct Move {
+    pub index: usize,
+    pub groups: Vec<Group>,
 }
 
-impl Default for GameHistory {
-    fn default() -> Self {
-        Self {
-            history: Vec::new(),
-            current_index: 0,
+impl From<(usize, Vec<Group>)> for Move {
+    fn from(m: (usize, Vec<Group>)) -> Self {
+        Move {
+            index: m.0,
+            groups: m.1,
         }
     }
 }
 
-impl GameHistory {
-    fn push(&mut self, elem: (usize, Vec<Group>)) {
-        if self.current_index + 1 < self.history.len() {
-            let _ = self.history.split_off(self.current_index);
-        }
-        self.history.push(elem);
-        self.current_index += 1;
-    }
-
-    fn pop(&mut self) -> Option<(usize, Vec<Group>)> {
-        if self.current_index as isize - 1 >= 0 {
-            self.current_index -= 1;
-            Some(self.history[self.current_index].clone())
-        } else {
-            None
-        }
-    }
-
-    fn next(&mut self) -> Option<(Player, usize, Vec<Group>)> {
-        if self.current_index == self.history.len() {
-            None
-        } else {
-            let player = match self.current_index % 2 {
-                0 => Player::Black,
-                1 => Player::White,
-                _ => unreachable!(),
-            };
-            self.current_index += 1;
-            let (idx, dead_stones) = self.history[self.current_index-1].clone();
-            Some((player, idx, dead_stones))
-        }
+impl Into<(usize, Vec<Group>)> for Move {
+    fn into(self) -> (usize, Vec<Group>) {
+        (self.index, self.groups)
     }
 }
 
