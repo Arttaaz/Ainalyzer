@@ -29,6 +29,15 @@ impl Player {
     }
 }
 
+impl Into<sgf_parser::Color> for Player {
+    fn into(self) -> sgf_parser::Color {
+        match self {
+            Self::Black => sgf_parser::Color::Black,
+            Self::White => sgf_parser::Color::White,
+        }
+    }
+}
+
 #[derive(Clone, Data, Lens)]
 struct RootState {
     text: String,

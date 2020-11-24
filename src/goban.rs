@@ -113,7 +113,7 @@ impl Widget<crate::RootState> for Goban {
                     pos.y = ((pos.y - rect.y0) / (size/20.0)).round() - 1.0;
                     let pos = Point::new(pos.x as u32, pos.y as u32);
                     if pos.x < 19 && pos.y < 19 {
-                        let tmp_point = self.coord_to_idx(pos);
+                        let tmp_point = Goban::coord_to_idx(pos);
                         if !self.stones[tmp_point].visible {
                             self.stones[tmp_point] = match data.turn {
                                 Player::Black => Stone::black(),
@@ -141,8 +141,8 @@ impl Widget<crate::RootState> for Goban {
                 if ctx.is_hot() {
                     if self.hover.is_some() {
                         let (p, s) = self.hover.as_ref().unwrap().clone();
-                        if mouse_event.button == MouseButton::Left && !self.stones[self.coord_to_idx(p)].visible {
-                            let point = self.coord_to_idx(p);
+                        if mouse_event.button == MouseButton::Left && !self.stones[Goban::coord_to_idx(p)].visible {
+                            let point = Goban::coord_to_idx(p);
                             self.stones[point] = s;
                             match self.is_legal_move(&data.turn, self.last_move) {
                                 Ok(dead_groups) => {
@@ -173,7 +173,7 @@ impl Widget<crate::RootState> for Goban {
                                         if g.team != data.turn {
                                             enemy_groups.push(g.clone());
                                             for p in &g.stones {
-                                                let i = self.coord_to_idx(*p);
+                                                let i = Goban::coord_to_idx(*p);
                                                 self.stones[i] = Stone::default();
                                                 //add to captures
                                             }
@@ -211,6 +211,10 @@ impl Widget<crate::RootState> for Goban {
                             .allowed_types(vec![druid::FileSpec::new("sgf", &["sgf"])]);
                         ctx.submit_command(druid::Command::new(druid::commands::SHOW_OPEN_PANEL, open_options, druid::Target::Auto));
                     },
+                    KbKey::Character(s) if *s == "d".to_string() => {
+                        let history = Arc::make_mut(&mut data.history).into_game_tree();
+                        dbg!("{:?}", history);
+                    }
                     _ => (),
                 }
             },
@@ -266,7 +270,7 @@ impl Widget<crate::RootState> for Goban {
 
         self.stones.iter().enumerate().for_each(|(i, s)| {
             if s.visible {
-                s.draw(ctx, &rect, size, self.idx_to_coord(i));
+                s.draw(ctx, &rect, size, Goban::idx_to_coord(i));
             }
         });
 
@@ -291,11 +295,11 @@ impl Widget<crate::RootState> for Goban {
 }
 
 impl Goban {
-    fn idx_to_coord(&self, i: usize) -> Point {
+    pub fn idx_to_coord(i: usize) -> Point {
         Point::new(i as u32 / 19, i as u32 % 19)
     }
 
-    fn coord_to_idx(&self, p: Point) -> usize {
+    pub fn coord_to_idx(p: Point) -> usize {
         p.x as usize * 19 + p.y as usize
     }
 
@@ -317,20 +321,20 @@ impl Goban {
         while let Some((i, s)) = stones.pop() { // take one stone from the board
             let color = s.color.clone();
             stack.push(i); // add the stone to the stack of stone to explore
-            seen.insert(self.idx_to_coord(i));
+            seen.insert(Goban::idx_to_coord(i));
             while let Some(i) = stack.pop() { // while there is stones to explore
-                group_stones.push(self.idx_to_coord(i)); // add the stone to the group
-                for p in self.surrounding_points(self.idx_to_coord(i)) { // for each point around us
+                group_stones.push(Goban::idx_to_coord(i)); // add the stone to the group
+                for p in self.surrounding_points(Goban::idx_to_coord(i)) { // for each point around us
                     if !seen.insert(p) {
                         continue;
                     }
-                let s = self.stones[self.coord_to_idx(p)].clone(); // retrieve stone for color
+                let s = self.stones[Goban::coord_to_idx(p)].clone(); // retrieve stone for color
                     if !s.visible { // if intersection is empty and we have not yet counted this liberty
                         liberties.push(p); // add to liberties
                     } else if s.color == color { // if intersection is filled, and it's the same color as us
-                        stack.push(self.coord_to_idx(p));
+                        stack.push(Goban::coord_to_idx(p));
                         stones.retain(|(x, _s)| {
-                            *x != self.coord_to_idx(p)});
+                            *x != Goban::coord_to_idx(p)});
                     }
                 }
             }
@@ -438,7 +442,7 @@ impl Goban {
             self.stones[played_move] = Stone::default();
             for group in dead_stones {
                 for p in &group.stones {
-                    let i = self.coord_to_idx(*p);
+                    let i = Goban::coord_to_idx(*p);
                     self.stones[i] = match player {
                         Player::Black => Stone::white(),
                         Player::White => Stone::black(),
@@ -447,7 +451,7 @@ impl Goban {
             }
             data.turn.next();
             self.hover = None;
-            self.last_move = Some(self.idx_to_coord(played_move));
+            self.last_move = Some(Goban::idx_to_coord(played_move));
             ctx.request_paint();
         }
     }
@@ -460,13 +464,13 @@ impl Goban {
             };
             for group in dead_stones {
                 for p in &group.stones {
-                    let i = self.coord_to_idx(*p);
+                    let i = Goban::coord_to_idx(*p);
                     self.stones[i] = Stone::default();
                 }
             }
             data.turn.next();
             self.hover = None;
-            self.last_move = Some(self.idx_to_coord(played_move));
+            self.last_move = Some(Goban::idx_to_coord(played_move));
             ctx.request_paint();
         }
     }
