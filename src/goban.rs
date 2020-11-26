@@ -13,7 +13,7 @@ pub struct Point {
 }
 
 impl Point {
-    fn new(x: u32, y: u32) -> Self {
+    pub fn new(x: u32, y: u32) -> Self {
         Self {
             x,
             y,
@@ -69,6 +69,15 @@ impl Stone {
                 ctx.fill(Circle::new((rect.x0 + (coord.x+1) as f64 * size/20.0, rect.y0 + (coord.y+1) as f64 * size/20.0), size/41.8), &Color::WHITE.with_alpha(0.7)),
         }
         ctx.stroke(Circle::new((rect.x0 + (coord.x+1) as f64 * size/20.0, rect.y0 + (coord.y+1) as f64 * size/20.0), size/41.8), &Color::BLACK, 1.0);
+    }
+
+    fn possibilty(&self, ctx: &mut PaintCtx, rect: &Rect, size: f64, coord: Point) {
+        match self.color {
+            Player::Black =>
+                ctx.fill(Circle::new((rect.x0 + (coord.x+1) as f64 * size/20.0, rect.y0 + (coord.y+1) as f64 * size/20.0), size/70.0), &Color::BLACK.with_alpha(0.5)),
+            Player::White =>
+                ctx.fill(Circle::new((rect.x0 + (coord.x+1) as f64 * size/20.0, rect.y0 + (coord.y+1) as f64 * size/20.0), size/70.0), &Color::WHITE.with_alpha(0.5)),
+        }
     }
 }
 
@@ -142,51 +151,12 @@ impl Widget<crate::RootState> for Goban {
                     if self.hover.is_some() {
                         let (p, s) = self.hover.as_ref().unwrap().clone();
                         if mouse_event.button == MouseButton::Left && !self.stones[Goban::coord_to_idx(p)].visible {
-                            let point = Goban::coord_to_idx(p);
-                            self.stones[point] = s;
-                            match self.is_legal_move(&data.turn, self.last_move) {
-                                Ok(dead_groups) => {
-                                    self.ko = None;
-                                    if dead_groups.len() == 2 {
-                                        let mut we_died = false;
-                                        dead_groups.iter().for_each(|g| {
-                                            if g.team == data.turn {
-                                                we_died = true;
-                                            } else {
-                                                if g.stones.len() == 1 { // we check for a ko
-                                                    let is_ko = self.is_legal_move(match data.turn {
-                                                        Player::Black => &Player::White,
-                                                        Player::White => &Player::Black,
-                                                    }, Some(p)).is_err();
-                                                    if is_ko {
-                                                        self.ko = Some(g.stones[0]);
-                                                    }
-                                                }
-                                            }
-                                        });
-                                        if !we_died {
-                                            self.ko = None;
-                                        }
-                                    }
-                                    let mut enemy_groups = Vec::new();
-                                    dead_groups.iter().for_each(|g| {
-                                        if g.team != data.turn {
-                                            enemy_groups.push(g.clone());
-                                            for p in &g.stones {
-                                                let i = Goban::coord_to_idx(*p);
-                                                self.stones[i] = Stone::default();
-                                                //add to captures
-                                            }
-                                        }
-                                    });
-                                    Arc::make_mut(&mut data.history).push((point, enemy_groups));
-                                    self.last_move = Some(p);
-                                    self.hover = None;
-                                    data.turn.next();
-                                },
-                                Err(_) => (),
+                            let history = Arc::make_mut(&mut data.history);
+                            if history.set_variation_to_move(Goban::coord_to_idx(p)) {
+                                self.next_state(history, &mut data.turn);
+                            } else {
+                                self.play(history, &mut data.turn, p, s);
                             }
-
                             ctx.request_paint();
                         }
                     }
@@ -194,9 +164,13 @@ impl Widget<crate::RootState> for Goban {
             },
             Event::Wheel(mouse_event) => {
                 if mouse_event.wheel_delta.y < 0.0 {
-                    self.previous_state(ctx, data);
+                    let history = Arc::make_mut(&mut data.history);
+                    self.previous_state(history, &mut data.turn);
+                    ctx.request_paint();
                 } else {
-                    self.next_state(ctx, data);
+                    let history = Arc::make_mut(&mut data.history);
+                    self.next_state(history, &mut data.turn);
+                    ctx.request_paint();
                 }
             },
             Event::KeyUp(KeyEvent {
@@ -204,8 +178,16 @@ impl Widget<crate::RootState> for Goban {
                 ..
             }) => {
                 match code {
-                    KbKey::ArrowLeft => self.previous_state(ctx, data),
-                    KbKey::ArrowRight => self.next_state(ctx, data),
+                    KbKey::ArrowLeft => {
+                        let history = Arc::make_mut(&mut data.history);
+                        self.previous_state(history, &mut data.turn);
+                        ctx.request_paint();
+                    },
+                    KbKey::ArrowRight => {
+                        let history = Arc::make_mut(&mut data.history);
+                        self.next_state(history, &mut data.turn);
+                        ctx.request_paint();
+                    },
                     KbKey::Character(s) if *s == "o".to_string() => {
                         let open_options = druid::FileDialogOptions::new()
                             .allowed_types(vec![druid::FileSpec::new("sgf", &["sgf"])]);
@@ -263,6 +245,18 @@ impl Widget<crate::RootState> for Goban {
         ctx.stroke(Circle::new((rect.x0 + 10.0 * size/20.0, rect.y1 - 4.0 * size/20.0), size/400.0), &Color::BLACK, size/400.0);
         ctx.stroke(Circle::new((rect.x0 + 10.0 * size/20.0, rect.y0 + 10.0 * size/20.0), size/400.0), &Color::BLACK, size/400.0);
 
+        let variations = data.history.get_possible_moves();
+        if variations.len() > 1 {
+            let stone = match data.turn {
+                Player::Black => Stone::black(),
+                Player::White => Stone::white(),
+            };
+            for v in variations {
+                let p = Goban::idx_to_coord(v);
+                stone.possibilty(ctx, &rect, size, p); 
+            }
+        }
+
         if self.hover.is_some() {
             let (p,s) = self.hover.as_ref().unwrap();
             s.hover(ctx, &rect, size, p.clone());
@@ -302,6 +296,55 @@ impl Goban {
     pub fn coord_to_idx(p: Point) -> usize {
         p.x as usize * 19 + p.y as usize
     }
+
+    pub fn play(&mut self, history: &mut crate::History, turn: &mut Player, p: Point, s: Stone) {
+        // check if move is in history, if it is, use next_state
+        let point = Goban::coord_to_idx(p);
+        self.stones[point] = s;
+        match self.is_legal_move(&turn, self.last_move) {
+            Ok(dead_groups) => {
+                self.ko = None;
+                if dead_groups.len() == 2 {
+                    let mut we_died = false;
+                    dead_groups.iter().for_each(|g| {
+                        if g.team == *turn {
+                            we_died = true;
+                        } else {
+                            if g.stones.len() == 1 { // we check for a ko
+                                let is_ko = self.is_legal_move(match turn {
+                                    Player::Black => &Player::White,
+                                    Player::White => &Player::Black,
+                                }, Some(p)).is_err();
+                                if is_ko {
+                                    self.ko = Some(g.stones[0]);
+                                }
+                            }
+                        }
+                    });
+                    if !we_died {
+                        self.ko = None;
+                    }
+                }
+                let mut enemy_groups = Vec::new();
+                dead_groups.iter().for_each(|g| {
+                    if g.team != *turn {
+                        enemy_groups.push(g.clone());
+                        for p in &g.stones {
+                            let i = Goban::coord_to_idx(*p);
+                            self.stones[i] = Stone::default();
+                            //add to captures
+                        }
+                    }
+                });
+                history.push((turn.clone(), point, enemy_groups));
+                self.last_move = Some(p);
+                self.hover = None;
+                turn.next();
+            },
+            Err(_) => (),
+        }
+    }
+
 
     fn find_groups(&self) -> Vec<Group> {
         let mut stones = self.stones.iter().enumerate().filter_map(|(i,s)| {
@@ -416,29 +459,30 @@ impl Goban {
 
 #[derive(Debug, Clone)]
 pub struct Move {
+    pub player: Player,
     pub index: usize,
     pub groups: Vec<Group>,
 }
 
-impl From<(usize, Vec<Group>)> for Move {
-    fn from(m: (usize, Vec<Group>)) -> Self {
+impl From<(Player, usize, Vec<Group>)> for Move {
+    fn from(m: (Player, usize, Vec<Group>)) -> Self {
         Move {
-            index: m.0,
-            groups: m.1,
+            player: m.0,
+            index: m.1,
+            groups: m.2,
         }
     }
 }
 
-impl Into<(usize, Vec<Group>)> for Move {
-    fn into(self) -> (usize, Vec<Group>) {
-        (self.index, self.groups)
+impl Into<(Player, usize, Vec<Group>)> for Move {
+    fn into(self) -> (Player, usize, Vec<Group>) {
+        (self.player, self.index, self.groups)
     }
 }
 
 impl Goban {
-    fn previous_state(&mut self, ctx: &mut EventCtx, data: &mut crate::RootState) {
-        if let Some((played_move, dead_stones)) = Arc::make_mut(&mut data.history).pop() {
-            let player = self.stones[played_move].color;
+    fn previous_state(&mut self, history: &mut crate::History, turn: &mut Player) {
+        if let Some((previous_move, (player, played_move, dead_stones))) = history.pop() {
             self.stones[played_move] = Stone::default();
             for group in dead_stones {
                 for p in &group.stones {
@@ -449,15 +493,18 @@ impl Goban {
                     }
                 }
             }
-            data.turn.next();
+            turn.next();
             self.hover = None;
-            self.last_move = Some(Goban::idx_to_coord(played_move));
-            ctx.request_paint();
+            self.last_move = if let Some(idx) = previous_move {
+                Some(Goban::idx_to_coord(idx))
+            } else {
+                None
+            };
         }
     }
 
-    fn next_state(&mut self, ctx: &mut EventCtx, data: &mut crate::RootState) {
-        if let Some((player, played_move, dead_stones)) = Arc::make_mut(&mut data.history).next() {
+    fn next_state(&mut self, history: &mut crate::History, turn: &mut Player) {
+        if let Some((player, played_move, dead_stones)) = history.next() {
             self.stones[played_move] = match player {
                 Player::Black => Stone::black(),
                 Player::White => Stone::white(),
@@ -468,10 +515,9 @@ impl Goban {
                     self.stones[i] = Stone::default();
                 }
             }
-            data.turn.next();
+            turn.next();
             self.hover = None;
             self.last_move = Some(Goban::idx_to_coord(played_move));
-            ctx.request_paint();
         }
     }
 }

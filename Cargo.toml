@@ -9,6 +9,7 @@
 	[dependencies]
 	log = "0.4"
 	scrub_log = "0.1.1"
-	druid = { git = "https://github.com/linebender/druid.git", rev = "0ca252f28993fe5394bc4dc96ab6f8253242477b" }
+	druid = { git = "https://github.com/linebender/druid.git", rev = "e6778547e88c400582a64da88f2b24f4da34c69e" }
 	libgtp = { git = "https://github.com/arttaaz/libgtp.git" }
 	sgf-parser = "2.4"
+	petgraph = "0.5.1"

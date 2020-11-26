@@ -1,8 +1,7 @@
 use std::sync::Arc;
 use log::info;
-use log::debug;
 use druid::widget::{Flex, Label};
-use druid::{AppLauncher, AppDelegate, Data, DelegateCtx, Event, Env, KbKey, KeyEvent, Lens, LocalizedString, Widget, WindowDesc, WindowId};
+use druid::{AppLauncher, AppDelegate, Data, DelegateCtx, Event, Env, Handled, KbKey, KeyEvent, Lens, LocalizedString, Widget, WindowDesc, WindowId};
 
 mod goban;
 use goban::Goban;
@@ -71,15 +70,13 @@ impl AppDelegate<RootState> for Delegate {
         }
     }
 
-    fn command(&mut self, _ctx: &mut DelegateCtx, _target: druid::Target, cmd: &druid::Command, data: &mut RootState, _env: &Env) -> bool {
+    fn command(&mut self, _ctx: &mut DelegateCtx, _target: druid::Target, cmd: &druid::Command, data: &mut RootState, _env: &Env) -> Handled {
         if let Some(file) = cmd.get(druid::commands::OPEN_FILE) {
             let sgf = std::fs::read_to_string(file.path()).expect("failed to load sgf");
             let game = sgf_parser::parse(sgf.as_str()).expect("failed to parse sgf");
-            //TODO: Build history tree from sgf
-            //data.history = Arc::new(Box::new(History {tree: game, current_node: game.iter().next().unwrap().clone()}));
-            debug!("{:?}", game);
+            data.history = Arc::new(Box::new(History::from(game)));
         }
-        false
+        Handled::No
     }
 }
 
