@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use log::debug;
 use sgf_parser::{GameTree, GameNode};
 use petgraph::prelude::*;
 
@@ -60,7 +59,6 @@ impl History {
     }
 
     pub fn push(&mut self, elem: (Player, usize, Vec<Group>)) -> Result<(), HistoryError> {
-        debug!("push method called");
         // If the graph is empty we need a fictional first node
         if self.moves.node_count() == 0 {
             self.moves.add_node(Move {
@@ -77,7 +75,6 @@ impl History {
             // we just created a variation and need to add it to variation_picker
             if self.moves.neighbors(self.current_index).next().is_some() {
                 self.variation_picker.insert(self.current_index, new_node);
-                debug!("{:?}", &self.variation_picker);
             }
             self.moves.add_edge(self.current_index, new_node, ());
         } else {
@@ -106,7 +103,6 @@ impl History {
             } else {
                 None
             };
-            dbg!("index after pop: {}", self.current_index);
             Some((previous_move, move_to_pop.into()))
         } else {
             None
