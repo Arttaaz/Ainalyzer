@@ -1379,8 +1379,7 @@ dependencies = [
 [[package]]
 name = "sgf-parser"
 version = "2.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db6b0c1301fc28b0c36d0778bda1de72a61c5b02e4596868726762142b05114b"
+source = "git+https://github.com/arttaaz/sgf-parser.git?rev=68f895fa3a2d38e09ceeaafe7b056ea168c4ec65#68f895fa3a2d38e09ceeaafe7b056ea168c4ec65"
 dependencies = [
  "derive_more",
  "pest",

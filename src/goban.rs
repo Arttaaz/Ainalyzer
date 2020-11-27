@@ -188,18 +188,46 @@ impl Widget<crate::RootState> for Goban {
                         self.next_state(history, &mut data.turn);
                         ctx.request_paint();
                     },
-                    KbKey::Character(s) if *s == "o".to_string() => {
-                        let open_options = druid::FileDialogOptions::new()
-                            .allowed_types(vec![druid::FileSpec::new("sgf", &["sgf"])]);
-                        ctx.submit_command(druid::Command::new(druid::commands::SHOW_OPEN_PANEL, open_options, druid::Target::Auto));
-                    },
-                    KbKey::Character(s) if *s == "d".to_string() => {
-                        let history = Arc::make_mut(&mut data.history).into_game_tree();
-                        dbg!("{:?}", history);
+                    KbKey::Character(s) => {
+                        match s.as_str() {
+                            "o" => {
+                                let open_options = druid::FileDialogOptions::new()
+                                    .allowed_types(vec![druid::FileSpec::new("sgf", &["sgf"])]);
+                                ctx.submit_command(druid::Command::new(druid::commands::SHOW_OPEN_PANEL, open_options, druid::Target::Auto));
+                            },
+                            "d" => {
+                                let _history = Arc::make_mut(&mut data.history).into_game_tree();
+                            },
+                            "n" => {
+                                if data.is_file_updated() {}
+                                self.stones = vec![Stone::default(); 19*19 as usize];
+                                self.hover = None;
+                                self.last_move = None;
+                                self.ko = None;
+                            },
+                            "s" => {
+                                if data.path.is_some() {
+                                    ctx.submit_command(druid::Command::new(druid::commands::SAVE_FILE, None, druid::Target::Auto));
+                                } else {
+                                    let open_options = druid::FileDialogOptions::new()
+                                        .allowed_types(vec![druid::FileSpec::new("sgf", &["sgf"])]);
+                                    ctx.submit_command(druid::Command::new(druid::commands::SHOW_SAVE_PANEL, open_options, druid::Target::Auto));
+                                }
+                            },
+                            _ => (),
+                        }
                     }
                     _ => (),
                 }
             },
+            Event::Command(s) => {
+                if s.get(druid::commands::OPEN_FILE).is_some() {
+                    self.stones = vec![Stone::default(); 19*19 as usize];
+                    self.hover = None;
+                    self.last_move = None;
+                    self.ko = None;
+                }
+            }
             _ => (),
         }
     }
@@ -253,7 +281,7 @@ impl Widget<crate::RootState> for Goban {
             };
             for v in variations {
                 let p = Goban::idx_to_coord(v);
-                stone.possibilty(ctx, &rect, size, p); 
+                stone.possibilty(ctx, &rect, size, p);
             }
         }
 
@@ -336,7 +364,10 @@ impl Goban {
                         }
                     }
                 });
-                history.push((turn.clone(), point, enemy_groups));
+                match history.push((turn.clone(), point, enemy_groups)) {
+                    Ok(_) => (),
+                    Err(_) => panic!(), // show message something went wrong
+                }
                 self.last_move = Some(p);
                 self.hover = None;
                 turn.next();
@@ -481,7 +512,7 @@ impl Into<(Player, usize, Vec<Group>)> for Move {
 }
 
 impl Goban {
-    fn previous_state(&mut self, history: &mut crate::History, turn: &mut Player) {
+    pub fn previous_state(&mut self, history: &mut crate::History, turn: &mut Player) {
         if let Some((previous_move, (player, played_move, dead_stones))) = history.pop() {
             self.stones[played_move] = Stone::default();
             for group in dead_stones {
@@ -503,7 +534,7 @@ impl Goban {
         }
     }
 
-    fn next_state(&mut self, history: &mut crate::History, turn: &mut Player) {
+    pub fn next_state(&mut self, history: &mut crate::History, turn: &mut Player) {
         if let Some((player, played_move, dead_stones)) = history.next() {
             self.stones[played_move] = match player {
                 Player::Black => Stone::black(),

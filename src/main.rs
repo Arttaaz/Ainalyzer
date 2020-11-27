@@ -1,5 +1,7 @@
 use std::sync::Arc;
+use std::io::Write;
 use log::info;
+//use log::debug;
 use druid::widget::{Flex, Label};
 use druid::{AppLauncher, AppDelegate, Data, DelegateCtx, Event, Env, Handled, KbKey, KeyEvent, Lens, LocalizedString, Widget, WindowDesc, WindowId};
 
@@ -42,6 +44,23 @@ struct RootState {
     text: String,
     pub turn: Player,
     pub history: Arc<Box<History>>,
+    pub path: Option<String>,
+}
+
+impl RootState {
+    pub fn is_file_updated(&self) -> bool {
+        if let Some(path) = &self.path {
+            let file = std::fs::read_to_string(std::path::PathBuf::from(path)).expect("couldn't open file");
+            let sgf: String = self.history.into_game_tree().into();
+            if file == sgf {
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    }
 }
 
 struct Delegate;
@@ -72,11 +91,29 @@ impl AppDelegate<RootState> for Delegate {
 
     fn command(&mut self, _ctx: &mut DelegateCtx, _target: druid::Target, cmd: &druid::Command, data: &mut RootState, _env: &Env) -> Handled {
         if let Some(file) = cmd.get(druid::commands::OPEN_FILE) {
+            data.path = Some(file.path().to_str().unwrap().to_string());
             let sgf = std::fs::read_to_string(file.path()).expect("failed to load sgf");
             let game = sgf_parser::parse(sgf.as_str()).expect("failed to parse sgf");
             data.history = Arc::new(Box::new(History::from(game)));
+            Handled::No
+        } else if let Some(file) = cmd.get(druid::commands::SAVE_FILE) {
+            if let Some(path) = file {
+                data.path = Some(path.path().to_str().unwrap().to_owned());
+            }
+
+            let file = std::fs::OpenOptions::new()
+                .write(true)
+                .create(true)
+                .open(data.path.clone().unwrap())
+                .expect("couldn't create/open file");
+
+            let mut bufw = std::io::BufWriter::new(file);
+            let sgf: String = data.history.into_game_tree().into();
+            bufw.write_all(sgf.as_bytes()).expect("couldn't write to file");
+            Handled::Yes
+        } else {
+            Handled::Yes
         }
-        Handled::No
     }
 }
 
@@ -94,6 +131,7 @@ fn main() {
             text: "AInalyzer".to_string(),
             turn: Player::Black,
             history: Arc::new(Box::new(History::default())),
+            path: None,
         })
         .expect("failed to launch app");
 }

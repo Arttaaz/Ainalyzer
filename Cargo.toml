@@ -11,5 +11,5 @@
 	scrub_log = "0.1.1"
 	druid = { git = "https://github.com/linebender/druid.git", rev = "e6778547e88c400582a64da88f2b24f4da34c69e" }
 	libgtp = { git = "https://github.com/arttaaz/libgtp.git" }
-	sgf-parser = "2.4"
+	sgf-parser = { git = "https://github.com/arttaaz/sgf-parser.git", rev = "68f895fa3a2d38e09ceeaafe7b056ea168c4ec65" }
 	petgraph = "0.5.1"

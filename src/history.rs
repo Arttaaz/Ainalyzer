@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use sgf_parser::{GameTree, GameNode};
+use sgf_parser::{GameTree, GameNode, SgfToken};
 use petgraph::prelude::*;
 
 use crate::{Player, goban::{Point, Stone}};
@@ -13,60 +13,140 @@ pub enum HistoryError {
 
 //TODO: from sgf_parser::GameTree
 //      into sgf_parser::GameTree
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct History {
     pub moves: Graph<Move, (), Directed>,
     pub current_index: NodeIndex<u32>,
     pub variation_picker: HashMap<NodeIndex<u32>, NodeIndex<u32>>,
+    pub game_info: GameNode,
+}
+
+impl Default for History {
+    fn default() -> Self {
+        let mut graph = Graph::new();
+        graph.add_node(Move {
+            player: Player::White,
+            index: 0,
+            groups: Vec::new(),
+        });
+
+        let game_info = GameNode {
+            tokens: vec![
+                SgfToken::Game(sgf_parser::Game::Go),
+                SgfToken::FileFormat(4),
+                SgfToken::Charset(sgf_parser::Encoding::UTF8),
+                SgfToken::Application {
+                    name: "AInalyzer".to_string(),
+                    version: "0.1.0".to_string(),
+                },
+                SgfToken::VariationDisplay {
+                    nodes: sgf_parser::DisplayNodes::Children,
+                    on_board_display: true,
+                },
+                SgfToken::Rule(sgf_parser::RuleSet::Japanese),
+                SgfToken::Size(19, 19),
+                SgfToken::Komi(6.5),
+                SgfToken::PlayerName {
+                    color: sgf_parser::Color::Black,
+                    name: "Black".to_string(),
+                },
+                SgfToken::PlayerName {
+                    color: sgf_parser::Color::White,
+                    name: "White".to_string(),
+                },
+            ],
+        };
+
+        History {
+            moves: graph,
+            current_index: 0.into(),
+            variation_picker: HashMap::new(),
+            game_info,
+        }
+    }
 }
 
 impl From<GameTree> for History {
     // This is costly, playing out the whole game to create the history tree
     // The sgf loading from must only contain valid moves
     fn from(t: GameTree) -> Self {
+        log::debug!("start loading sgf");
         let mut goban = crate::goban::Goban::default();
         let mut history = Self::default();
-        for n in t.nodes {
+        let mut turn = Player::Black;
+        history.game_info = t.nodes.first().unwrap().clone();
+        history.add_tree_to_history(t, &mut turn, &mut goban);
+        history.current_index = 0.into();
+        log::debug!("finished loading sgf");
+        history
+    }
+}
+
+impl History {
+
+    fn add_tree_to_history(&mut self, tree: GameTree, turn: &mut Player, goban: &mut crate::Goban) -> usize {
+        let mut counter = 0;
+        for n in tree.nodes {
             for t in n.tokens {
                 match t {
                     sgf_parser::SgfToken::Move { color, action } => {
                         if let sgf_parser::Action::Move(x, y) = action {
-                            let mut turn = match color {
+                            *turn = match color {
                                 sgf_parser::Color::Black => Player::Black,
                                 sgf_parser::Color::White => Player::White,
                             };
                             let stone = match turn.clone() { Player::White => Stone::white(), Player::Black => Stone::black() };
-                            goban.play(&mut history, &mut turn, Point::new(x as u32 -1, y as u32 - 1), stone);
+                            goban.play(self, turn, Point::new(x as u32 - 1, y as u32 - 1), stone);
+                            counter += 1;
                         }
                     },
                     _ => (),
                 }
             }
         }
-        history
-    }
-}
 
-impl History {
+        // it's used but clippy can't see it
+        #[allow(unused_assignments)]
+        let mut counter2 = 0;
+        for v in tree.variations {
+            counter2 = self.add_tree_to_history(v, turn, goban);
+            for _ in 0..counter2 {
+                goban.previous_state(self, turn);
+            }
+        }
+        counter
+    }
+
     pub fn into_game_tree(&self) -> sgf_parser::GameTree {
-        self.build_game_tree(Player::Black).unwrap()
+        // 0 is always the root node
+        self.build_game_tree(0.into()).unwrap()
     }
 
-    fn build_game_tree(&self, player: crate::Player) -> Option<GameTree> {
-        let mut player = player;
+    fn build_game_tree(&self, index: NodeIndex<u32>) -> Option<GameTree> {
         let mut sgf = GameTree::default();
+        if index != 0.into() {
+            let Point {mut x, mut y} = crate::Goban::idx_to_coord(self.moves[index].index);
+            x += 1;
+            y += 1;
+            sgf.nodes.push(GameNode { tokens: vec![sgf_parser::SgfToken::Move {
+                color: match self.moves[index].player {
+                    Player::Black => sgf_parser::Color::Black,
+                    Player::White => sgf_parser::Color::White,
+                },
+                action: sgf_parser::Action::Move(x as u8, y as u8),
+            }]});
+        } else {
+            sgf.nodes.push(self.game_info.clone());
+        }
+        for n in self.moves.neighbors(index) {
+            if let Some(tree) = self.build_game_tree(n) {
+                sgf.variations.push(tree);
+            }
+        }
         Some(sgf)
     }
 
     pub fn push(&mut self, elem: (Player, usize, Vec<Group>)) -> Result<(), HistoryError> {
-        // If the graph is empty we need a fictional first node
-        if self.moves.node_count() == 0 {
-            self.moves.add_node(Move {
-                player: Player::White,
-                index: 0,
-                groups: Vec::new(),
-            });
-        }
 
         let new_node = self.moves.add_node(elem.into());
         // This check is there to prevent add_edge from panicking
@@ -130,7 +210,7 @@ impl History {
             if self.moves[e].index == mov {
                 self.variation_picker.insert(self.current_index, e);
                 return true
-            } 
+            }
         }
         false
     }
