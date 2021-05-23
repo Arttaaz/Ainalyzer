@@ -199,11 +199,27 @@ impl Widget<crate::RootState> for Goban {
                                 let _history = Arc::make_mut(&mut data.history).into_game_tree();
                             },
                             "n" => {
-                                if data.is_file_updated() {}
-                                self.stones = vec![Stone::default(); 19*19 as usize];
-                                self.hover = None;
-                                self.last_move = None;
-                                self.ko = None;
+                                if !data.is_file_updated() {
+                                    //show dialog to ask if user wants to save changes
+                                    ctx.new_window(druid::WindowDesc::new(crate::dialogs::create_ask_save_changes_dialog)
+                                        .title("Save Changes?")
+                                        .window_size((500.0, 100.0))
+                                        .resizable(false));
+
+                                    /*if data.path.is_some() {
+                                        ctx.submit_command(druid::Command::new(druid::commands::SAVE_FILE, None, druid::Target::Auto));
+                                    } else {
+                                        // ask if user wants to save first
+                                        let open_options = druid::FileDialogOptions::new()
+                                            .allowed_types(vec![druid::FileSpec::new("sgf", &["sgf"])]);
+                                        ctx.submit_command(druid::Command::new(druid::commands::SHOW_SAVE_PANEL, open_options, druid::Target::Auto));
+                                    }*/
+                                } else {
+                                    self.stones = vec![Stone::default(); 19*19 as usize];
+                                    self.hover = None;
+                                    self.last_move = None;
+                                    self.ko = None;
+                                }
                             },
                             "s" => {
                                 if data.path.is_some() {
@@ -226,6 +242,8 @@ impl Widget<crate::RootState> for Goban {
                     self.hover = None;
                     self.last_move = None;
                     self.ko = None;
+                } else if s.get(druid::commands::CLOSE_WINDOW).is_some() {
+                   log::debug!("Hey"); 
                 }
             }
             _ => (),

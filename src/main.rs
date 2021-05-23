@@ -5,6 +5,8 @@ use log::info;
 use druid::widget::{Flex, Label};
 use druid::{AppLauncher, AppDelegate, Data, DelegateCtx, Event, Env, Handled, KbKey, KeyEvent, Lens, LocalizedString, Widget, WindowDesc, WindowId};
 
+mod dialogs;
+
 mod goban;
 use goban::Goban;
 
@@ -40,7 +42,7 @@ impl Into<sgf_parser::Color> for Player {
 }
 
 #[derive(Clone, Data, Lens)]
-struct RootState {
+pub struct RootState {
     text: String,
     pub turn: Player,
     pub history: Arc<Box<History>>,
@@ -111,6 +113,9 @@ impl AppDelegate<RootState> for Delegate {
             let sgf: String = data.history.into_game_tree().into();
             bufw.write_all(sgf.as_bytes()).expect("couldn't write to file");
             Handled::Yes
+        } else if let Some(_) = cmd.get(druid::commands::CLOSE_WINDOW) {
+            log::debug!("hey");
+            Handled::No
         } else {
             Handled::Yes
         }
