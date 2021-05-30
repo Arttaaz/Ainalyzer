@@ -201,7 +201,7 @@ impl Widget<crate::RootState> for Goban {
                             "n" => {
                                 if !data.is_file_updated() {
                                     //show dialog to ask if user wants to save changes
-                                    ctx.new_window(druid::WindowDesc::new(crate::dialogs::create_ask_save_changes_dialog)
+                                    ctx.new_window(druid::WindowDesc::new(crate::dialogs::create_ask_save_changes_dialog())
                                         .title("Save Changes?")
                                         .window_size((500.0, 100.0))
                                         .resizable(false));
@@ -223,7 +223,7 @@ impl Widget<crate::RootState> for Goban {
                             },
                             "s" => {
                                 if data.path.is_some() {
-                                    ctx.submit_command(druid::Command::new(druid::commands::SAVE_FILE, None, druid::Target::Auto));
+                                    ctx.submit_command(druid::Command::new(druid::commands::SAVE_FILE, (), druid::Target::Auto));
                                 } else {
                                     let open_options = druid::FileDialogOptions::new()
                                         .allowed_types(vec![druid::FileSpec::new("sgf", &["sgf"])]);
@@ -243,7 +243,7 @@ impl Widget<crate::RootState> for Goban {
                     self.last_move = None;
                     self.ko = None;
                 } else if s.get(druid::commands::CLOSE_WINDOW).is_some() {
-                   log::debug!("Hey"); 
+                   log::debug!("Hey");
                 }
             }
             _ => (),

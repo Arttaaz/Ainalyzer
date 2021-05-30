@@ -5,7 +5,7 @@ pub fn create_ask_save_changes_dialog() -> impl Widget<crate::RootState> {
     let b_save: Button<crate::RootState> = Button::new("Save");
     let b_save = b_save.on_click(|c, data, _| {
         if data.is_file_updated() {
-            c.submit_command(druid::Command::new(druid::commands::SAVE_FILE, None, druid::Target::Auto));
+            c.submit_command(druid::Command::new(druid::commands::SAVE_FILE, (), druid::Target::Auto));
         } else {
             let open_options = druid::FileDialogOptions::new()
                 .allowed_types(vec![druid::FileSpec::new("sgf", &["sgf"])]);

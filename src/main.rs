@@ -98,10 +98,8 @@ impl AppDelegate<RootState> for Delegate {
             let game = sgf_parser::parse(sgf.as_str()).expect("failed to parse sgf");
             data.history = Arc::new(Box::new(History::from(game)));
             Handled::No
-        } else if let Some(file) = cmd.get(druid::commands::SAVE_FILE) {
-            if let Some(path) = file {
-                data.path = Some(path.path().to_str().unwrap().to_owned());
-            }
+        } else if let Some(file) = cmd.get(druid::commands::SAVE_FILE_AS) {
+            data.path = Some(file.path().to_str().unwrap().to_owned());
 
             let file = std::fs::OpenOptions::new()
                 .write(true)
@@ -125,7 +123,7 @@ impl AppDelegate<RootState> for Delegate {
 fn main() {
     scrub_log::init().unwrap();
     info!("Starting the app");
-    let main_window = WindowDesc::new(build_root_widget)
+    let main_window = WindowDesc::new(build_root_widget())
         .title(WINDOW_TITLE)
         .with_min_size((400.0, 400.0))
         .window_size((1280.0, 720.0));
