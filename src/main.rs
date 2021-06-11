@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::io::Write;
 use log::info;
 //use log::debug;
@@ -6,6 +6,9 @@ use druid::widget::{Flex, Label};
 use druid::{AppLauncher, AppDelegate, Data, DelegateCtx, Event, Env, Handled, KbKey, KeyEvent, Lens, LocalizedString, Widget, WindowDesc, WindowId};
 
 mod dialogs;
+
+mod engine;
+use engine::Engine;
 
 mod goban;
 use goban::Goban;
@@ -47,6 +50,7 @@ pub struct RootState {
     pub turn: Player,
     pub history: Arc<Box<History>>,
     pub path: Option<String>,
+    pub engine: Arc<Mutex<libgtp::Engine>>,
 }
 
 impl RootState {
@@ -135,6 +139,7 @@ fn main() {
             turn: Player::Black,
             history: Arc::new(Box::new(History::default())),
             path: None,
+            engine: Arc::new(Mutex::new(libgtp::Engine::new("KataGo/katago", &["gtp", "-model", "KataGo/model.bin.gz", "-config", "KataGo/default_gtp.cfg"]).expect("failed to start engine").start()))
         })
         .expect("failed to launch app");
 }
@@ -149,6 +154,8 @@ fn build_root_widget() -> impl Widget<RootState> {
         .with_spacer(VERTICAL_WIDGET_SPACING);
 
     Flex::row()
+        .with_flex_spacer(HORIZONTAL_WIDGET_SPACING)
+        .with_flex_child(Engine::build_engine_tab(), 1.0)
         .with_flex_spacer(HORIZONTAL_WIDGET_SPACING)
         .with_flex_child(layout, 1.0)
         .with_flex_spacer(HORIZONTAL_WIDGET_SPACING)

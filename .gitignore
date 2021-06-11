@@ -1,5 +1,6 @@
 /KataGo
 /target
+/gtp_logs
 .vscode
 .github
 *.sgf
