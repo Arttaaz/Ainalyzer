@@ -50,7 +50,8 @@ pub struct RootState {
     pub turn: Player,
     pub history: Arc<Box<History>>,
     pub path: Option<String>,
-    pub engine: Arc<Mutex<libgtp::Engine>>,
+    pub engine: Arc<Mutex<libgtp::Controller>>,
+    pub analyze_state: String,
 }
 
 impl RootState {
@@ -139,7 +140,8 @@ fn main() {
             turn: Player::Black,
             history: Arc::new(Box::new(History::default())),
             path: None,
-            engine: Arc::new(Mutex::new(libgtp::Engine::new("KataGo/katago", &["gtp", "-model", "KataGo/model.bin.gz", "-config", "KataGo/default_gtp.cfg"]).expect("failed to start engine").start()))
+            engine: Arc::new(Mutex::new(libgtp::Controller::new("KataGo/katago", &["gtp", "-model", "KataGo/model.bin.gz", "-config", "KataGo/default_gtp.cfg"]))),
+            analyze_state: String::new(),
         })
         .expect("failed to launch app");
 }
@@ -155,7 +157,7 @@ fn build_root_widget() -> impl Widget<RootState> {
 
     Flex::row()
         .with_flex_spacer(HORIZONTAL_WIDGET_SPACING)
-        .with_flex_child(Engine::build_engine_tab(), 1.0)
+        .with_flex_child(Engine::build_engine_tab(), 0.2)
         .with_flex_spacer(HORIZONTAL_WIDGET_SPACING)
         .with_flex_child(layout, 1.0)
         .with_flex_spacer(HORIZONTAL_WIDGET_SPACING)

@@ -1,4 +1,3 @@
-use std::io::Write;
 use druid::widget::prelude::*;
 use druid::{ Data, Lens, Widget,};
 use druid::widget::Button;
@@ -28,6 +27,16 @@ impl Engine {
     pub fn build_engine_tab() -> impl Widget<crate::RootState> {
         Flex::row()
         .with_flex_child(Button::new("Analyze").on_click(|_, data: &mut crate::RootState, _| {
-            data.engine.lock().expect("couldn't get engine").write("kata-analyze".as_bytes()).unwrap(); }), 0.1)
+            match data.engine.lock().expect("couldn't get engine").send_command("kata-analyze".parse().unwrap()).unwrap() {
+                libgtp::Answer::Response(_) => (),
+                libgtp::Answer::Failure(f) => eprintln!("{}", f),
+            };
+            data.analyze_state = data.engine.lock().expect("couldn't get engine").read_info();
+        }), 0.1)
+        .with_flex_child(Button::new("Stop").on_click(|_, data: &mut crate::RootState, _| {
+            match data.engine.lock().expect("couldn't get engine").send_command("stop".parse().unwrap()).unwrap() {
+                libgtp::Answer::Response(r) => r.to_string(),
+                libgtp::Answer::Failure(f) => { eprintln!("{}", f); String::new()},
+            };}), 0.1)
     }
 }
