@@ -259,6 +259,7 @@ impl Widget<crate::RootState> for Goban {
     }
 
     fn paint(&mut self, ctx: &mut PaintCtx, data: &crate::RootState, _env: &Env) {
+
         let rect = Rect::from(ctx.region().bounding_box().contained_rect_with_aspect_ratio(1.0));
 
         let size = rect.height();

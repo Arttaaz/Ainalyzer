@@ -51,7 +51,7 @@ pub struct RootState {
     pub history: Arc<Box<History>>,
     pub path: Option<String>,
     pub engine: Arc<Mutex<libgtp::Controller>>,
-    pub analyze_state: String,
+    pub analyze_state: Arc<Box<Option<libgtp::Info>>>,
 }
 
 impl RootState {
@@ -141,7 +141,7 @@ fn main() {
             history: Arc::new(Box::new(History::default())),
             path: None,
             engine: Arc::new(Mutex::new(libgtp::Controller::new("KataGo/katago", &["gtp", "-model", "KataGo/model.bin.gz", "-config", "KataGo/default_gtp.cfg"]))),
-            analyze_state: String::new(),
+            analyze_state: Arc::new(Box::new(None)),
         })
         .expect("failed to launch app");
 }

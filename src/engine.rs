@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use druid::widget::prelude::*;
 use druid::{ Data, Lens, Widget,};
 use druid::widget::Button;
@@ -9,11 +10,14 @@ pub struct Engine {
 
 
 impl Widget<crate::RootState> for Engine {
-    fn event(&mut self, _ctx: &mut EventCtx, _event: &Event, _data: &mut crate::RootState, _env: &Env) {}
+    fn event(&mut self, _ctx: &mut EventCtx, _event: &Event, data: &mut crate::RootState, _env: &Env) {
+        log::info!("{:?}", data.analyze_state);
+    }
 
     fn lifecycle(&mut self, _ctx: &mut LifeCycleCtx, _event: &LifeCycle, _data: &crate::RootState, _env: &Env) {}
 
-    fn update(&mut self, _ctx: &mut UpdateCtx, _old_data: &crate::RootState, _data: &crate::RootState, _env: &Env) {}
+    fn update(&mut self, _ctx: &mut UpdateCtx, _old_data: &crate::RootState, _data: &crate::RootState, _env: &Env) {
+    }
 
     fn layout(&mut self, _ctx: &mut LayoutCtx, bc: &BoxConstraints, _data: &crate::RootState, _env: &Env) -> Size {
         bc.max()
@@ -30,13 +34,16 @@ impl Engine {
             match data.engine.lock().expect("couldn't get engine").send_command("kata-analyze".parse().unwrap()).unwrap() {
                 libgtp::Answer::Response(_) => (),
                 libgtp::Answer::Failure(f) => eprintln!("{}", f),
+                _ => unreachable!(),
             };
-            data.analyze_state = data.engine.lock().expect("couldn't get engine").read_info();
+            let analyze = Arc::make_mut(&mut data.analyze_state);
+            **analyze = data.engine.lock().expect("couldn't get engine").read_info().expect("failed to parse info I guess");
         }), 0.1)
         .with_flex_child(Button::new("Stop").on_click(|_, data: &mut crate::RootState, _| {
             match data.engine.lock().expect("couldn't get engine").send_command("stop".parse().unwrap()).unwrap() {
                 libgtp::Answer::Response(r) => r.to_string(),
                 libgtp::Answer::Failure(f) => { eprintln!("{}", f); String::new()},
+                _ => unreachable!(),
             };}), 0.1)
     }
 }
