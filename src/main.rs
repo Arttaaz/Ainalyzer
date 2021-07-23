@@ -16,6 +16,8 @@ use goban::Goban;
 mod history;
 use history::History;
 
+mod selectors;
+
 const HORIZONTAL_WIDGET_SPACING: f64 = 0.1; // Flex factor
 const VERTICAL_WIDGET_SPACING: f64 = 20.0;
 const WINDOW_TITLE: LocalizedString<RootState> = LocalizedString::new("AInalyzer!");
@@ -52,6 +54,7 @@ pub struct RootState {
     pub path: Option<String>,
     pub engine: Arc<Mutex<libgtp::Controller>>,
     pub analyze_state: Arc<Box<Option<libgtp::Info>>>,
+    pub analyze_timer_token: Arc<Option<druid::TimerToken>>,
 }
 
 impl RootState {
@@ -73,7 +76,7 @@ impl RootState {
 struct Delegate;
 
 impl AppDelegate<RootState> for Delegate {
-    fn event(&mut self, ctx: &mut DelegateCtx, _window_id: WindowId, event: Event, _data: &mut RootState, _env: &Env) -> Option<Event> {
+    fn event(&mut self, ctx: &mut DelegateCtx, _window_id: WindowId, event: Event, data: &mut RootState, _env: &Env) -> Option<Event> {
         match event.clone() {
             Event::KeyUp(KeyEvent {
                 key: code,
@@ -92,6 +95,14 @@ impl AppDelegate<RootState> for Delegate {
                 //},
                 _ => Some(event),
             },
+            Event::Timer(t) => {
+                if data.analyze_timer_token.is_some() {
+                    if data.analyze_timer_token.unwrap() == t {
+                        ctx.submit_command(selectors::ANALYZE_TIMER_TOKEN);
+                    }
+                }
+                Some(event)
+            }
             _ => Some(event),
         }
     }
@@ -142,6 +153,7 @@ fn main() {
             path: None,
             engine: Arc::new(Mutex::new(libgtp::Controller::new("KataGo/katago", &["gtp", "-model", "KataGo/model.bin.gz", "-config", "KataGo/default_gtp.cfg"]))),
             analyze_state: Arc::new(Box::new(None)),
+            analyze_timer_token: Arc::new(None),
         })
         .expect("failed to launch app");
 }
