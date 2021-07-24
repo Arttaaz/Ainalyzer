@@ -37,6 +37,15 @@ impl Player {
     }
 }
 
+impl std::fmt::Display for Player {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", match self {
+            Self::Black => "B",
+            Self::White => "W",
+        })
+    }
+}
+
 impl Into<sgf_parser::Color> for Player {
     fn into(self) -> sgf_parser::Color {
         match self {
@@ -53,7 +62,7 @@ pub struct RootState {
     pub history: Arc<Box<History>>,
     pub path: Option<String>,
     pub engine: Arc<Mutex<libgtp::Controller>>,
-    pub analyze_state: Arc<Box<Option<libgtp::Info>>>,
+    pub analyze_state: Arc<Option<libgtp::Info>>,
     pub analyze_timer_token: Arc<Option<druid::TimerToken>>,
 }
 
@@ -99,10 +108,11 @@ impl AppDelegate<RootState> for Delegate {
                 if data.analyze_timer_token.is_some() {
                     if data.analyze_timer_token.unwrap() == t {
                         ctx.submit_command(selectors::ANALYZE_TIMER_TOKEN);
+                        ctx.submit_command(selectors::DRAW_ANALYZE);
                     }
                 }
                 Some(event)
-            }
+            },
             _ => Some(event),
         }
     }
@@ -131,7 +141,7 @@ impl AppDelegate<RootState> for Delegate {
             log::debug!("hey");
             Handled::No
         } else {
-            Handled::Yes
+            Handled::No
         }
     }
 }
@@ -152,7 +162,7 @@ fn main() {
             history: Arc::new(Box::new(History::default())),
             path: None,
             engine: Arc::new(Mutex::new(libgtp::Controller::new("KataGo/katago", &["gtp", "-model", "KataGo/model.bin.gz", "-config", "KataGo/default_gtp.cfg"]))),
-            analyze_state: Arc::new(Box::new(None)),
+            analyze_state: Arc::new(None),
             analyze_timer_token: Arc::new(None),
         })
         .expect("failed to launch app");

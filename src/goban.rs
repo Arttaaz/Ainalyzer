@@ -4,12 +4,25 @@ use druid::kurbo::{Line, Circle, Rect};
 use crate::Player;
 use std::collections::HashSet;
 use std::sync::Arc;
-//use log::debug;
+use libgtp::model::Info;
+use libgtp::model::InfoMove;
 
 #[derive(Debug, Clone, Data, Copy, PartialEq, Eq, Hash)]
 pub struct Point {
     pub x: u32,
     pub y: u32,
+}
+
+impl std::fmt::Display for Point {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        let x = if self.x > 8 {
+            self.x + 1
+        } else {
+            self.x
+        };
+
+        write!(f, "{}{}", ((x as u8 + 65) as char).to_uppercase(), self.y+1)
+    }
 }
 
 impl Point {
@@ -78,6 +91,27 @@ impl Stone {
             Player::White =>
                 ctx.fill(Circle::new((rect.x0 + (coord.x+1) as f64 * size/20.0, rect.y0 + (coord.y+1) as f64 * size/20.0), size/70.0), &Color::WHITE.with_alpha(0.5)),
         }
+    }
+}
+
+struct AnalyzeInfo(Info);
+
+impl AnalyzeInfo {
+    fn draw(&self, ctx: &mut PaintCtx, rect: &Rect, size: f64, player: Player) {
+        let color = match player {
+            Player::Black => Color::BLACK,
+            Player::White => Color::WHITE,
+        };
+
+        self.0.explored_moves.iter().for_each(|move_info| {
+            let point = move_info.coord.to_tuple();
+            if let Some((x, y)) = point {
+                let mut text_layout: druid::TextLayout<String> = druid::TextLayout::new();
+                text_layout.set_text(format!("{:.3}", move_info.lcb));
+                text_layout.needs_rebuild();
+                ctx.fill(Circle::new((rect.x0 + (x) as f64 * size/20.0, rect.y0 + (y) as f64 * size/20.0), size/41.8), &color.clone().with_alpha(0.3));
+            }
+        });
     }
 }
 
@@ -157,6 +191,10 @@ impl Widget<crate::RootState> for Goban {
                             } else {
                                 self.play(history, &mut data.turn, p, s);
                             }
+                            let mut engine = data.engine.lock().unwrap();
+                            engine.send_command(format!("play {} {}", data.turn, p).as_str().parse().unwrap()).unwrap();
+                            engine.send_command("kata-analyze interval 50 ownership true".parse().unwrap()).unwrap();
+                            data.analyze_state = Arc::new(None);
                             ctx.request_paint();
                         }
                     }
@@ -244,6 +282,8 @@ impl Widget<crate::RootState> for Goban {
                     self.ko = None;
                 } else if s.get(druid::commands::CLOSE_WINDOW).is_some() {
                    log::debug!("Hey");
+                } else if s.get(crate::selectors::DRAW_ANALYZE).is_some() {
+                    ctx.request_paint();
                 }
             }
             _ => (),
@@ -314,6 +354,15 @@ impl Widget<crate::RootState> for Goban {
                 s.draw(ctx, &rect, size, Goban::idx_to_coord(i));
             }
         });
+
+        if data.analyze_state.is_some() {
+            let analyze_state = data.analyze_state.clone();
+            let analyze_state = analyze_state.as_ref();
+            let analyze_state = analyze_state.clone();
+
+            let analyze = AnalyzeInfo(analyze_state.unwrap());
+            analyze.draw(ctx, &rect, size, data.turn);
+        }
 
         if self.ko.is_some() {
             let ko = self.ko.unwrap();
