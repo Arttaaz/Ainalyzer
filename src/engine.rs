@@ -51,7 +51,7 @@ impl Engine {
                 libgtp::Answer::Failure(f) => eprintln!("{}", f),
                 _ => unreachable!(),
             };
-        }), 0.1)
+        }), 1.5)
         .with_flex_child(Button::new("Stop").on_click(|_, data: &mut crate::RootState, _| {
             match data.engine.lock().expect("couldn't get engine").send_command("stop".parse().unwrap()).unwrap() {
                 libgtp::Answer::Response(_) => {
@@ -59,6 +59,14 @@ impl Engine {
                 },
                 libgtp::Answer::Failure(f) => { eprintln!("{}", f); },
                 _ => unreachable!(),
-            };}), 0.1)
+            };}), 1.0)
+    }
+
+    pub fn engine_startup() -> libgtp::Controller {
+        let mut controller = libgtp::Controller::new("../KataGo/katago", &["gtp", "-model", "../KataGo/model.bin.gz", "-config", "../KataGo/default_gtp.cfg"]);
+        controller.send_command("kata-set-rules japanese".parse().unwrap()).unwrap();
+        controller.send_command("komi 6.5".parse().unwrap()).unwrap();
+        controller.send_command("clear_board".parse().unwrap()).unwrap();
+        controller
     }
 }

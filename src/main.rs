@@ -1,8 +1,7 @@
 use std::sync::{Arc, Mutex};
 use std::io::Write;
 use log::info;
-//use log::debug;
-use druid::widget::{Flex, Label};
+use druid::widget::Flex;
 use druid::{AppLauncher, AppDelegate, Data, DelegateCtx, Event, Env, Handled, KbKey, KeyEvent, Lens, LocalizedString, Widget, WindowDesc, WindowId};
 
 mod dialogs;
@@ -161,7 +160,7 @@ fn main() {
             turn: Player::Black,
             history: Arc::new(Box::new(History::default())),
             path: None,
-            engine: Arc::new(Mutex::new(libgtp::Controller::new("KataGo/katago", &["gtp", "-model", "KataGo/model.bin.gz", "-config", "KataGo/default_gtp.cfg"]))),
+            engine: Arc::new(Mutex::new(Engine::engine_startup())),
             analyze_state: Arc::new(None),
             analyze_timer_token: Arc::new(None),
         })
@@ -169,10 +168,7 @@ fn main() {
 }
 
 fn build_root_widget() -> impl Widget<RootState> {
-    let label = Label::new(|data: &RootState, _env: &Env| format!("{}", data.text));
     let layout = Flex::column()
-        .with_spacer(VERTICAL_WIDGET_SPACING)
-        .with_child(label)
         .with_spacer(VERTICAL_WIDGET_SPACING)
         .with_flex_child(Goban::default(), 1.0)
         .with_spacer(VERTICAL_WIDGET_SPACING);

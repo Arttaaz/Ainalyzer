@@ -5,7 +5,7 @@ use crate::Player;
 use std::collections::HashSet;
 use std::sync::Arc;
 use libgtp::model::Info;
-use libgtp::model::InfoMove;
+//use libgtp::model::InfoMove;
 
 #[derive(Debug, Clone, Data, Copy, PartialEq, Eq, Hash)]
 pub struct Point {
@@ -97,7 +97,7 @@ impl Stone {
 struct AnalyzeInfo(Info);
 
 impl AnalyzeInfo {
-    fn draw(&self, ctx: &mut PaintCtx, rect: &Rect, size: f64, player: Player) {
+    fn draw(&self, ctx: &mut PaintCtx, rect: &Rect, env: &Env, size: f64, player: Player) {
         let color = match player {
             Player::Black => Color::BLACK,
             Player::White => Color::WHITE,
@@ -106,10 +106,28 @@ impl AnalyzeInfo {
         self.0.explored_moves.iter().for_each(|move_info| {
             let point = move_info.coord.to_tuple();
             if let Some((x, y)) = point {
-                let mut text_layout: druid::TextLayout<String> = druid::TextLayout::new();
-                text_layout.set_text(format!("{:.3}", move_info.lcb));
-                text_layout.needs_rebuild();
                 ctx.fill(Circle::new((rect.x0 + (x) as f64 * size/20.0, rect.y0 + (y) as f64 * size/20.0), size/41.8), &color.clone().with_alpha(0.3));
+                
+                let mut text_layout: druid::TextLayout<String> = druid::TextLayout::new();
+                text_layout.set_text(format!("{:^4.1}", move_info.winrate * 100.0));
+                text_layout.set_text_size(size/69.0);
+                text_layout.set_text_color(match player {
+                    Player::Black => Color::WHITE,
+                    Player::White => Color::BLACK,
+                });
+                text_layout.set_text_alignment(druid::TextAlignment::Center);
+                text_layout.rebuild_if_needed(ctx.text(), env);
+                text_layout.draw(ctx, (rect.x0 + (x as f64 - 0.32)* size/20.0, rect.y0 + (y as f64 - 0.32) * size/20.0));
+                let mut text_playouts = druid::TextLayout::new();
+                text_playouts.set_text(format!("{:^4}", move_info.visits));
+                text_playouts.set_text_size(size/69.0);
+                text_playouts.set_text_color(match player {
+                    Player::Black => Color::WHITE,
+                    Player::White => Color::BLACK,
+                });
+                text_playouts.set_text_alignment(druid::TextAlignment::Center);
+                text_playouts.rebuild_if_needed(ctx.text(), env);
+                text_playouts.draw(ctx, (rect.x0 + (x as f64 - 0.32)* size/20.0, rect.y0 + y as f64 * size/20.0));
             }
         });
     }
@@ -185,16 +203,18 @@ impl Widget<crate::RootState> for Goban {
                     if self.hover.is_some() {
                         let (p, s) = self.hover.as_ref().unwrap().clone();
                         if mouse_event.button == MouseButton::Left && !self.stones[Goban::coord_to_idx(p)].visible {
+                            let mut engine = data.engine.lock().unwrap();
+                            engine.send_command(format!("play {} {}", data.turn, p).as_str().parse().unwrap()).unwrap();
                             let history = Arc::make_mut(&mut data.history);
                             if history.set_variation_to_move(Goban::coord_to_idx(p)) {
                                 self.next_state(history, &mut data.turn);
                             } else {
                                 self.play(history, &mut data.turn, p, s);
                             }
-                            let mut engine = data.engine.lock().unwrap();
-                            engine.send_command(format!("play {} {}", data.turn, p).as_str().parse().unwrap()).unwrap();
-                            engine.send_command("kata-analyze interval 50 ownership true".parse().unwrap()).unwrap();
-                            data.analyze_state = Arc::new(None);
+                            if let Some(_) = *data.analyze_state {
+                                engine.send_command("kata-analyze interval 50 ownership true".parse().unwrap()).unwrap();
+                                data.analyze_state = Arc::new(None);
+                            }
                             ctx.request_paint();
                         }
                     }
@@ -203,11 +223,29 @@ impl Widget<crate::RootState> for Goban {
             Event::Wheel(mouse_event) => {
                 if mouse_event.wheel_delta.y < 0.0 {
                     let history = Arc::make_mut(&mut data.history);
-                    self.previous_state(history, &mut data.turn);
+                    if self.previous_state(history, &mut data.turn) {
+                        let mut engine = data.engine.lock().unwrap();
+                        engine.send_command("undo".parse().unwrap()).unwrap();
+                        if let Some(_) = *data.analyze_state {
+                            engine.send_command("kata-analyze interval 50 ownership true".parse().unwrap()).unwrap();
+                            data.analyze_state = Arc::new(None);
+                        }
+                    }
                     ctx.request_paint();
                 } else {
                     let history = Arc::make_mut(&mut data.history);
-                    self.next_state(history, &mut data.turn);
+                    if self.next_state(history, &mut data.turn) {
+                        let color = match data.turn {
+                            Player::Black => "W",
+                            Player::White => "B",
+                        };
+                        let mut engine = data.engine.lock().unwrap();
+                        engine.send_command(format!("play {} {}", color, &self.last_move.unwrap()).parse().unwrap()).unwrap();
+                        if let Some(_) = *data.analyze_state {
+                            engine.send_command("kata-analyze interval 50 ownership true".parse().unwrap()).unwrap();
+                            data.analyze_state = Arc::new(None);
+                        }
+                    }
                     ctx.request_paint();
                 }
             },
@@ -218,12 +256,30 @@ impl Widget<crate::RootState> for Goban {
                 match code {
                     KbKey::ArrowLeft => {
                         let history = Arc::make_mut(&mut data.history);
-                        self.previous_state(history, &mut data.turn);
+                        if self.previous_state(history, &mut data.turn) {
+                            let mut engine = data.engine.lock().unwrap();
+                            engine.send_command("undo".parse().unwrap()).unwrap();
+                            if let Some(_) = *data.analyze_state {
+                                engine.send_command("kata-analyze interval 50 ownership true".parse().unwrap()).unwrap();
+                                data.analyze_state = Arc::new(None);
+                            }
+                        }
                         ctx.request_paint();
                     },
                     KbKey::ArrowRight => {
                         let history = Arc::make_mut(&mut data.history);
-                        self.next_state(history, &mut data.turn);
+                        if self.next_state(history, &mut data.turn) {
+                            let color = match data.turn {
+                                Player::Black => "W",
+                                Player::White => "B",
+                            };
+                            let mut engine = data.engine.lock().unwrap();
+                            engine.send_command(format!("play {} {}", color, &self.last_move.unwrap()).parse().unwrap()).unwrap();
+                            if let Some(_) = *data.analyze_state {
+                                engine.send_command("kata-analyze interval 50 ownership true".parse().unwrap()).unwrap();
+                                data.analyze_state = Arc::new(None);
+                            }
+                        }
                         ctx.request_paint();
                     },
                     KbKey::Character(s) => {
@@ -298,8 +354,7 @@ impl Widget<crate::RootState> for Goban {
         bc.max()
     }
 
-    fn paint(&mut self, ctx: &mut PaintCtx, data: &crate::RootState, _env: &Env) {
-
+    fn paint(&mut self, ctx: &mut PaintCtx, data: &crate::RootState, env: &Env) {
         let rect = Rect::from(ctx.region().bounding_box().contained_rect_with_aspect_ratio(1.0));
 
         let size = rect.height();
@@ -361,7 +416,7 @@ impl Widget<crate::RootState> for Goban {
             let analyze_state = analyze_state.clone();
 
             let analyze = AnalyzeInfo(analyze_state.unwrap());
-            analyze.draw(ctx, &rect, size, data.turn);
+            analyze.draw(ctx, &rect, env, size, data.turn);
         }
 
         if self.ko.is_some() {
@@ -580,7 +635,7 @@ impl Into<(Player, usize, Vec<Group>)> for Move {
 }
 
 impl Goban {
-    pub fn previous_state(&mut self, history: &mut crate::History, turn: &mut Player) {
+    pub fn previous_state(&mut self, history: &mut crate::History, turn: &mut Player) -> bool {
         if let Some((previous_move, (player, played_move, dead_stones))) = history.pop() {
             self.stones[played_move] = Stone::default();
             for group in dead_stones {
@@ -599,10 +654,14 @@ impl Goban {
             } else {
                 None
             };
+
+            true
+        } else {
+            false
         }
     }
 
-    pub fn next_state(&mut self, history: &mut crate::History, turn: &mut Player) {
+    pub fn next_state(&mut self, history: &mut crate::History, turn: &mut Player) -> bool {
         if let Some((player, played_move, dead_stones)) = history.next() {
             self.stones[played_move] = match player {
                 Player::Black => Stone::black(),
@@ -617,6 +676,10 @@ impl Goban {
             turn.next();
             self.hover = None;
             self.last_move = Some(Goban::idx_to_coord(played_move));
+
+            true
+        } else {
+            false
         }
     }
 }
