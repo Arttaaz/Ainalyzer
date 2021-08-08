@@ -1,3 +1,4 @@
+use crate::engine_commands::*;
 use std::sync::Arc;
 use druid::widget::prelude::*;
 use druid::{ Data, Lens, Widget,};
@@ -14,9 +15,9 @@ impl Widget<crate::RootState> for Engine {
         match event {
             Event::Command(c) => {
                 if c.get(crate::selectors::ANALYZE_TIMER_TOKEN).is_some() {
-                    let analyze = Arc::make_mut(&mut data.analyze_state);
+                    let analyze = Arc::make_mut(&mut data.analyze_info);
                     *analyze = data.engine.lock().expect("couldn't get engine").read_info().expect("failed to parse info");
-                    data.analyze_timer_token = Arc::new(Some(ctx.request_timer(std::time::Duration::from_millis(100))));
+                    data.analyze_timer_token = Arc::new(Some(ctx.request_timer(std::time::Duration::from_millis(50))));
                 }
             },
             _ => (),
@@ -42,9 +43,11 @@ impl Engine {
         .with_flex_child(Engine {}, 0.1)
         .with_flex_child(Button::new("Analyze").on_click(|ctx, data: &mut crate::RootState, _| {
             let mut engine = data.engine.lock().expect("couldn't get engine");
-            match engine.send_command("kata-analyze interval 50 ownership true".parse().unwrap()).unwrap() {
-                libgtp::Answer::Response(_) => { 
-                    let analyze = Arc::make_mut(&mut data.analyze_state);
+            match engine.send_command(COMMAND_ANALYZE.clone()).unwrap() {
+                libgtp::Answer::Response(_) => {
+                    let mut state = data.engine_state.lock().unwrap();
+                    state.consume(&crate::EngineStateInput::StartAnalyze);
+                    let analyze = Arc::make_mut(&mut data.analyze_info);
                     *analyze = engine.read_info().expect("failed to parse info I guess");
                     data.analyze_timer_token = Arc::new(Some(ctx.request_timer(std::time::Duration::from_millis(50))));
                 },
@@ -53,8 +56,10 @@ impl Engine {
             };
         }), 1.5)
         .with_flex_child(Button::new("Stop").on_click(|_, data: &mut crate::RootState, _| {
-            match data.engine.lock().expect("couldn't get engine").send_command("stop".parse().unwrap()).unwrap() {
+            match data.engine.lock().expect("couldn't get engine").send_command(COMMAND_STOP.clone()).unwrap() {
                 libgtp::Answer::Response(_) => {
+                    let mut state = data.engine_state.lock().unwrap();
+                    state.consume(&crate::EngineStateInput::StopAnalyze);
                     data.analyze_timer_token = Arc::new(None);
                 },
                 libgtp::Answer::Failure(f) => { eprintln!("{}", f); },
@@ -63,10 +68,10 @@ impl Engine {
     }
 
     pub fn engine_startup() -> libgtp::Controller {
-        let mut controller = libgtp::Controller::new("../KataGo/katago", &["gtp", "-model", "../KataGo/model.bin.gz", "-config", "../KataGo/default_gtp.cfg"]);
-        controller.send_command("kata-set-rules japanese".parse().unwrap()).unwrap();
-        controller.send_command("komi 6.5".parse().unwrap()).unwrap();
-        controller.send_command("clear_board".parse().unwrap()).unwrap();
+        let mut controller = libgtp::Controller::new("./KataGo/katago", &["gtp", "-model", "./KataGo/model.bin.gz", "-config", "./KataGo/default_gtp.cfg"]);
+        controller.send_command(COMMAND_RULES_JAPANESE.clone()).unwrap();
+        controller.send_command(COMMAND_KOMI.clone()).unwrap();
+        controller.send_command(COMMAND_CLEARBOARD.clone()).unwrap();
         controller
     }
 }

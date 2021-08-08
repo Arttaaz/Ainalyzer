@@ -2,6 +2,9 @@ use druid::widget::prelude::*;
 use druid::{Data, Color, KeyEvent, KbKey, MouseButton};
 use druid::kurbo::{Line, Circle, Rect};
 use crate::Player;
+use crate::engine_commands::*;
+use crate::EngineStateInput;
+use crate::EngineStateState;
 use std::collections::HashSet;
 use std::sync::Arc;
 use libgtp::model::Info;
@@ -103,28 +106,43 @@ impl AnalyzeInfo {
             Player::White => Color::WHITE,
         };
 
+        let max_winrate = self.0.explored_moves.iter()
+            .filter(|x| x.coord.to_tuple().is_some())
+            .map(|x| ((x.winrate * 1000.0) as u64, (x.coord.to_tuple().unwrap())))
+            .max_by_key(|x| x.0).unwrap();
+        let max_visits = self.0.explored_moves.iter()
+            .filter(|x| x.coord.to_tuple().is_some())
+            .map(|x| (x.visits, (x.coord.to_tuple().unwrap())))
+            .max_by_key(|x| x.0).unwrap();
+        
+        let brush = druid::RadialGradient::new(0.4, (Color::GREEN.with_alpha(0.75), Color::GREEN.with_alpha(0.0)));
+        ctx.fill(Circle::new((rect.x0 + (max_winrate.1.0) as f64 * size/20.0, rect.y0 + (max_winrate.1.1) as f64 * size/20.0),
+                    size/30.0), &brush);
+        let brush = druid::RadialGradient::new(0.4, (Color::rgba8(7, 109, 252, 200), Color::BLUE.with_alpha(0.0)));
+        ctx.fill(Circle::new((rect.x0 + (max_visits.1.0) as f64 * size/20.0, rect.y0 + (max_visits.1.1) as f64 * size/20.0),
+                    size/30.0), &brush);
+
         self.0.explored_moves.iter().for_each(|move_info| {
             let point = move_info.coord.to_tuple();
             if let Some((x, y)) = point {
-                ctx.fill(Circle::new((rect.x0 + (x) as f64 * size/20.0, rect.y0 + (y) as f64 * size/20.0), size/41.8), &color.clone().with_alpha(0.3));
+                if ((x, y) != max_winrate.1) && ((x, y) != max_visits.1) {
+                    let brush = druid::RadialGradient::new(0.4, (Color::RED.with_alpha(0.75), Color::RED.with_alpha(0.0)));
+                    ctx.fill(Circle::new((rect.x0 + x as f64 * size/20.0, rect.y0 + y as f64 * size/20.0),
+                            size/30.0), &brush);
+                    //ctx.fill(Circle::new((rect.x0 + (x) as f64 * size/20.0, rect.y0 + (y) as f64 * size/20.0), size/41.8), &color.clone().with_alpha(0.3));
+                }
                 
                 let mut text_layout: druid::TextLayout<String> = druid::TextLayout::new();
                 text_layout.set_text(format!("{:^4.1}", move_info.winrate * 100.0));
                 text_layout.set_text_size(size/69.0);
-                text_layout.set_text_color(match player {
-                    Player::Black => Color::WHITE,
-                    Player::White => Color::BLACK,
-                });
+                text_layout.set_text_color(Color::WHITE);
                 text_layout.set_text_alignment(druid::TextAlignment::Center);
                 text_layout.rebuild_if_needed(ctx.text(), env);
                 text_layout.draw(ctx, (rect.x0 + (x as f64 - 0.32)* size/20.0, rect.y0 + (y as f64 - 0.32) * size/20.0));
                 let mut text_playouts = druid::TextLayout::new();
-                text_playouts.set_text(format!("{:^4}", move_info.visits));
+                text_playouts.set_text(format_num::format_num!("^.2s", move_info.visits as f64));
                 text_playouts.set_text_size(size/69.0);
-                text_playouts.set_text_color(match player {
-                    Player::Black => Color::WHITE,
-                    Player::White => Color::BLACK,
-                });
+                text_playouts.set_text_color(Color::WHITE);
                 text_playouts.set_text_alignment(druid::TextAlignment::Center);
                 text_playouts.rebuild_if_needed(ctx.text(), env);
                 text_playouts.draw(ctx, (rect.x0 + (x as f64 - 0.32)* size/20.0, rect.y0 + y as f64 * size/20.0));
@@ -211,9 +229,10 @@ impl Widget<crate::RootState> for Goban {
                             } else {
                                 self.play(history, &mut data.turn, p, s);
                             }
-                            if let Some(_) = *data.analyze_state {
-                                engine.send_command("kata-analyze interval 50 ownership true".parse().unwrap()).unwrap();
-                                data.analyze_state = Arc::new(None);
+                            let state = data.engine_state.lock().unwrap();
+                            match state.state() {
+                                crate::EngineStateState::Analyzing => { engine.send_command(COMMAND_ANALYZE.clone()).unwrap(); },
+                                crate::EngineStateState::Idle => { data.analyze_info = Arc::new(None); },
                             }
                             ctx.request_paint();
                         }
@@ -225,10 +244,11 @@ impl Widget<crate::RootState> for Goban {
                     let history = Arc::make_mut(&mut data.history);
                     if self.previous_state(history, &mut data.turn) {
                         let mut engine = data.engine.lock().unwrap();
-                        engine.send_command("undo".parse().unwrap()).unwrap();
-                        if let Some(_) = *data.analyze_state {
-                            engine.send_command("kata-analyze interval 50 ownership true".parse().unwrap()).unwrap();
-                            data.analyze_state = Arc::new(None);
+                        engine.send_command(COMMAND_UNDO.clone()).unwrap();
+                        let state = data.engine_state.lock().unwrap();
+                        match state.state() {
+                            crate::EngineStateState::Analyzing => { engine.send_command(COMMAND_ANALYZE.clone()).unwrap(); },
+                            crate::EngineStateState::Idle => { data.analyze_info = Arc::new(None); },
                         }
                     }
                     ctx.request_paint();
@@ -241,9 +261,10 @@ impl Widget<crate::RootState> for Goban {
                         };
                         let mut engine = data.engine.lock().unwrap();
                         engine.send_command(format!("play {} {}", color, &self.last_move.unwrap()).parse().unwrap()).unwrap();
-                        if let Some(_) = *data.analyze_state {
-                            engine.send_command("kata-analyze interval 50 ownership true".parse().unwrap()).unwrap();
-                            data.analyze_state = Arc::new(None);
+                        let state = data.engine_state.lock().unwrap();
+                        match state.state() {
+                            crate::EngineStateState::Analyzing => { engine.send_command(COMMAND_ANALYZE.clone()).unwrap(); },
+                            crate::EngineStateState::Idle => { data.analyze_info = Arc::new(None); },
                         }
                     }
                     ctx.request_paint();
@@ -259,9 +280,10 @@ impl Widget<crate::RootState> for Goban {
                         if self.previous_state(history, &mut data.turn) {
                             let mut engine = data.engine.lock().unwrap();
                             engine.send_command("undo".parse().unwrap()).unwrap();
-                            if let Some(_) = *data.analyze_state {
-                                engine.send_command("kata-analyze interval 50 ownership true".parse().unwrap()).unwrap();
-                                data.analyze_state = Arc::new(None);
+                            if data.analyze_timer_token.is_some() {
+                                engine.send_command(COMMAND_ANALYZE.clone()).unwrap();
+                            } else if data.analyze_info.is_some() {
+                                data.analyze_info = Arc::new(None);
                             }
                         }
                         ctx.request_paint();
@@ -275,9 +297,10 @@ impl Widget<crate::RootState> for Goban {
                             };
                             let mut engine = data.engine.lock().unwrap();
                             engine.send_command(format!("play {} {}", color, &self.last_move.unwrap()).parse().unwrap()).unwrap();
-                            if let Some(_) = *data.analyze_state {
-                                engine.send_command("kata-analyze interval 50 ownership true".parse().unwrap()).unwrap();
-                                data.analyze_state = Arc::new(None);
+                            if data.analyze_timer_token.is_some() {
+                                engine.send_command(COMMAND_ANALYZE.clone()).unwrap();
+                            } else if data.analyze_info.is_some() {
+                                data.analyze_info = Arc::new(None);
                             }
                         }
                         ctx.request_paint();
@@ -324,6 +347,21 @@ impl Widget<crate::RootState> for Goban {
                                     ctx.submit_command(druid::Command::new(druid::commands::SHOW_SAVE_PANEL, open_options, druid::Target::Auto));
                                 }
                             },
+                            " " => {
+                                let mut state = data.engine_state.lock().unwrap();
+                                let mut engine = data.engine.lock().unwrap();
+                                match state.state() {
+                                    EngineStateState::Idle => {
+                                        engine.send_command(COMMAND_ANALYZE.clone()).unwrap();
+                                        state.consume(&EngineStateInput::StartAnalyze);
+                                        data.analyze_timer_token = Arc::new(Some(ctx.request_timer(std::time::Duration::from_millis(50))));
+                                    },
+                                    EngineStateState::Analyzing => {
+                                        engine.send_command(COMMAND_STOP.clone()).unwrap();
+                                        state.consume(&EngineStateInput::StopAnalyze);
+                                    },
+                                }
+                            }
                             _ => (),
                         }
                     }
@@ -410,12 +448,12 @@ impl Widget<crate::RootState> for Goban {
             }
         });
 
-        if data.analyze_state.is_some() {
-            let analyze_state = data.analyze_state.clone();
-            let analyze_state = analyze_state.as_ref();
-            let analyze_state = analyze_state.clone();
+        if data.analyze_info.is_some() {
+            let analyze_info = data.analyze_info.clone();
+            let analyze_info = analyze_info.as_ref();
+            let analyze_info = analyze_info.clone();
 
-            let analyze = AnalyzeInfo(analyze_state.unwrap());
+            let analyze = AnalyzeInfo(analyze_info.unwrap());
             analyze.draw(ctx, &rect, env, size, data.turn);
         }
 

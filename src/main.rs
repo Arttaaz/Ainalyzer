@@ -1,3 +1,5 @@
+#[macro_use] extern crate lazy_static;
+
 use std::sync::{Arc, Mutex};
 use std::io::Write;
 use log::info;
@@ -16,6 +18,7 @@ mod history;
 use history::History;
 
 mod selectors;
+mod engine_commands;
 
 const HORIZONTAL_WIDGET_SPACING: f64 = 0.1; // Flex factor
 const VERTICAL_WIDGET_SPACING: f64 = 20.0;
@@ -54,6 +57,15 @@ impl Into<sgf_parser::Color> for Player {
     }
 }
 
+// State machine
+rust_fsm::state_machine! {
+    derive(Debug, Clone)
+    pub EngineState(Idle)
+
+    Idle(StartAnalyze) => Analyzing,
+    Analyzing(StopAnalyze) => Idle,
+}
+
 #[derive(Clone, Data, Lens)]
 pub struct RootState {
     text: String,
@@ -61,7 +73,8 @@ pub struct RootState {
     pub history: Arc<Box<History>>,
     pub path: Option<String>,
     pub engine: Arc<Mutex<libgtp::Controller>>,
-    pub analyze_state: Arc<Option<libgtp::Info>>,
+    pub engine_state: Arc<Mutex<rust_fsm::StateMachine<EngineState>>>,
+    pub analyze_info: Arc<Option<libgtp::Info>>,
     pub analyze_timer_token: Arc<Option<druid::TimerToken>>,
 }
 
@@ -161,7 +174,8 @@ fn main() {
             history: Arc::new(Box::new(History::default())),
             path: None,
             engine: Arc::new(Mutex::new(Engine::engine_startup())),
-            analyze_state: Arc::new(None),
+            engine_state: Arc::new(Mutex::new(rust_fsm::StateMachine::new())),
+            analyze_info: Arc::new(None),
             analyze_timer_token: Arc::new(None),
         })
         .expect("failed to launch app");

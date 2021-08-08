@@ -1,0 +1,3 @@
+[submodule "KataGo"]
+	path = KataGo
+	url = https://github.com/lightvector/KataGo.git

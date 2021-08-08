@@ -1,15 +1,18 @@
-	[package]
-	name = "ainalyzer"
-	version = "0.1.0"
-	authors = ["arttaaz"]
-	edition = "2018"
+[package]
+name = "ainalyzer"
+version = "0.1.0"
+authors = ["arttaaz"]
+edition = "2018"
 
-	# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-	[dependencies]
-	log = "0.4"
-	scrub_log = "0.1.1"
-	druid = { git = "https://github.com/linebender/druid.git" }#, rev = "e6778547e88c400582a64da88f2b24f4da34c69e" }
-	libgtp = { git = "https://github.com/arttaaz/libgtp.git" }
-	sgf-parser = "2.6"#{ git = "https://github.com/arttaaz/sgf-parser.git", rev = "68f895fa3a2d38e09ceeaafe7b056ea168c4ec65" }
-	petgraph = "0.5.1"
+[dependencies]
+log = "0.4"
+scrub_log = "0.1.1"
+druid = { git = "https://github.com/linebender/druid.git" }
+libgtp = { git = "https://github.com/arttaaz/libgtp.git" }
+sgf-parser = "2.6"
+petgraph = "0.5.1"
+rust-fsm = "0.5.0"
+lazy_static = "1.4.0"
+format_num = "0.1.0"
