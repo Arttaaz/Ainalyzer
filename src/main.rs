@@ -74,7 +74,7 @@ pub struct RootState {
     pub path: Option<String>,
     pub engine: Arc<Mutex<libgtp::Controller>>,
     pub engine_state: Arc<Mutex<rust_fsm::StateMachine<EngineState>>>,
-    pub analyze_info: Arc<Option<libgtp::Info>>,
+    pub analyze_info: Arc<Mutex<Option<libgtp::Info>>>,
     pub analyze_timer_token: Arc<Option<druid::TimerToken>>,
 }
 
@@ -83,11 +83,8 @@ impl RootState {
         if let Some(path) = &self.path {
             let file = std::fs::read_to_string(std::path::PathBuf::from(path)).expect("couldn't open file");
             let sgf: String = self.history.into_game_tree().into();
-            if file == sgf {
-                true
-            } else {
-                false
-            }
+            
+            file == sgf
         } else {
             false
         }
@@ -175,7 +172,7 @@ fn main() {
             path: None,
             engine: Arc::new(Mutex::new(Engine::engine_startup())),
             engine_state: Arc::new(Mutex::new(rust_fsm::StateMachine::new())),
-            analyze_info: Arc::new(None),
+            analyze_info: Arc::new(Mutex::new(None)),
             analyze_timer_token: Arc::new(None),
         })
         .expect("failed to launch app");

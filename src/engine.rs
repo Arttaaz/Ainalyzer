@@ -15,9 +15,9 @@ impl Widget<crate::RootState> for Engine {
         match event {
             Event::Command(c) => {
                 if c.get(crate::selectors::ANALYZE_TIMER_TOKEN).is_some() {
-                    let analyze = Arc::make_mut(&mut data.analyze_info);
+                    let mut analyze = data.analyze_info.lock().unwrap();
                     *analyze = data.engine.lock().expect("couldn't get engine").read_info().expect("failed to parse info");
-                    data.analyze_timer_token = Arc::new(Some(ctx.request_timer(std::time::Duration::from_millis(50))));
+                    data.analyze_timer_token = Arc::new(Some(ctx.request_timer(TIMER_INTERVAL.clone())));
                 }
             },
             _ => (),
@@ -46,10 +46,10 @@ impl Engine {
             match engine.send_command(COMMAND_ANALYZE.clone()).unwrap() {
                 libgtp::Answer::Response(_) => {
                     let mut state = data.engine_state.lock().unwrap();
-                    state.consume(&crate::EngineStateInput::StartAnalyze);
-                    let analyze = Arc::make_mut(&mut data.analyze_info);
+                    let _ = state.consume(&crate::EngineStateInput::StartAnalyze);
+                    let mut analyze = data.analyze_info.lock().unwrap();
                     *analyze = engine.read_info().expect("failed to parse info I guess");
-                    data.analyze_timer_token = Arc::new(Some(ctx.request_timer(std::time::Duration::from_millis(50))));
+                    data.analyze_timer_token = Arc::new(Some(ctx.request_timer(TIMER_INTERVAL.clone())));
                 },
                 libgtp::Answer::Failure(f) => eprintln!("{}", f),
                 _ => unreachable!(),
@@ -59,7 +59,7 @@ impl Engine {
             match data.engine.lock().expect("couldn't get engine").send_command(COMMAND_STOP.clone()).unwrap() {
                 libgtp::Answer::Response(_) => {
                     let mut state = data.engine_state.lock().unwrap();
-                    state.consume(&crate::EngineStateInput::StopAnalyze);
+                    let _ = state.consume(&crate::EngineStateInput::StopAnalyze);
                     data.analyze_timer_token = Arc::new(None);
                 },
                 libgtp::Answer::Failure(f) => { eprintln!("{}", f); },
