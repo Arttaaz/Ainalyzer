@@ -5,6 +5,10 @@ use druid::{ Data, Lens, Widget,};
 use druid::widget::Button;
 use druid::widget::Flex;
 
+//use plotters::prelude::*;
+//use plotters_cairo::CairoBackend;
+
+
 #[derive(Clone, Data, Lens)]
 pub struct Engine {
 }
@@ -34,6 +38,7 @@ impl Widget<crate::RootState> for Engine {
     }
 
     fn paint(&mut self, _ctx: &mut PaintCtx, _data: &crate::RootState, _env: &Env) {
+        //CairoBackend::new(ctx.render_ctx.ctx, (0, 0));
     }
 }
 
