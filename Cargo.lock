@@ -28,7 +28,7 @@ dependencies = [
  "log",
  "petgraph",
  "rust-fsm",
- "scrub_log 0.1.1",
+ "scrub_log",
  "sgf-parser",
 ]
 
@@ -888,7 +888,7 @@ version = "0.1.0"
 source = "git+https://github.com/arttaaz/libgtp.git#18f49b389041936d200ed835425bc6be6d8794ca"
 dependencies = [
  "log",
- "scrub_log 0.2.1",
+ "scrub_log",
 ]
 
 [[package]]
@@ -1322,16 +1322,6 @@ name = "scopeguard"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d29ab0c6d3fc0ee92fe66e2d99f700eab17a8d57d1c1d3b748380fb20baa78cd"
-
-[[package]]
-name = "scrub_log"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d14f68551a0373d2d01537f8672451882088852401c3b41a6934cf6da562ee8"
-dependencies = [
- "ansi_term",
- "log",
-]
 
 [[package]]
 name = "scrub_log"

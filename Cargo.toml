@@ -8,7 +8,7 @@ edition = "2018"
 
 [dependencies]
 log = "0.4"
-scrub_log = "0.1.1"
+scrub_log = "0.2.1"
 druid = { git = "https://github.com/linebender/druid.git" }
 libgtp = { git = "https://github.com/arttaaz/libgtp.git" }
 sgf-parser = "2.6"
