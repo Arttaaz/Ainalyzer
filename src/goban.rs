@@ -426,8 +426,7 @@ impl Widget<crate::RootState> for Goban {
 
     fn paint(&mut self, ctx: &mut PaintCtx, data: &crate::RootState, env: &Env) {
         let rect = Rect::from(ctx.region().bounding_box().contained_rect_with_aspect_ratio(1.0));
-        ctx.fill(rect, &Color::WHITE);
-
+        //ctx.fill(rect, &Color::WHITE);
         let size = rect.height();
         let fill_color = Color::rgb8(219, 185, 52);
 

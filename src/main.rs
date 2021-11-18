@@ -20,7 +20,7 @@ use history::History;
 mod selectors;
 mod engine_commands;
 
-const HORIZONTAL_WIDGET_SPACING: f64 = 0.1; // Flex factor
+const HORIZONTAL_WIDGET_SPACING: f64 = 0.01; // Flex factor
 const VERTICAL_WIDGET_SPACING: f64 = 20.0;
 const WINDOW_TITLE: LocalizedString<RootState> = LocalizedString::new("AInalyzer!");
 
