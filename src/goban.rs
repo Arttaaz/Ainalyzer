@@ -34,6 +34,10 @@ impl Point {
             y,
         }
     }
+
+    pub fn as_coord_tuple(&self) -> (u8, u8) {
+        (self.x as u8, self.y as u8)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -99,6 +103,13 @@ impl Stone {
 struct AnalyzeInfo(Info);
 
 impl AnalyzeInfo {
+    fn max_winrate(&self) -> f32 {
+        self.0.explored_moves.iter()
+            .filter(|x| x.coord.to_tuple().is_some())
+            .map(|x| x.winrate * 100.0)
+            .max_by_key(|x| (x * 1000.0) as u64).unwrap()
+    }
+
     fn draw(&self, ctx: &mut PaintCtx, rect: &Rect, env: &Env, size: f64, player: Player) {
         self.0.ownership.iter().enumerate().for_each(|(point, ownership)| {
             let color = if ownership.is_sign_positive() {
@@ -175,6 +186,8 @@ pub struct Goban {
     pub hover: Option<(Point, Stone)>,
     pub last_move: Option<Point>,
     pub ko: Option<Point>,
+    pub current_move_number: u16,
+    pub total_move_number: u16,
 }
 
 impl Default for Goban {
@@ -184,6 +197,8 @@ impl Default for Goban {
             hover: None,
             last_move: None,
             ko: None,
+            current_move_number: 0,
+            total_move_number: 0,
         }
     }
 }
@@ -228,25 +243,68 @@ impl Widget<crate::RootState> for Goban {
             },
             Event::MouseUp(mouse_event) => {
                 if ctx.is_hot() {
+                    // if we are hovering hover a correct move
                     if self.hover.is_some() {
                         let (p, s) = self.hover.as_ref().unwrap().clone();
                         if mouse_event.button == MouseButton::Left && !self.stones[Goban::coord_to_idx(p)].visible {
-                            let mut info = data.analyze_info.lock().unwrap();
-                            *info = None;
-                            let mut engine = data.engine.lock().unwrap();
-                            engine.send_command(format!("play {} {}", data.turn, p).as_str().parse().unwrap()).unwrap();
                             let history = Arc::make_mut(&mut data.history);
                             if history.set_variation_to_move(Goban::coord_to_idx(p)) {
+                                // We are just moving in a variation
                                 self.next_state(history, &mut data.turn);
                             } else {
+                                // We play a new move
                                 self.play(history, &mut data.turn, p, s);
+                                // add winrate of the played move to the graph
+                                if self.current_move_number == self.total_move_number {
+                                    let info = data.analyze_info.lock().expect("couldn't get lock on info");
+                                    if info.is_some() {
+                                        let info = info.clone().unwrap();
+                                        let mut p = p;
+                                        p.x += 1;
+                                        p.y += 1;
+                                        let coord = info.explored_moves.iter().filter_map(|x| { 
+                                            if x.coord.to_tuple().is_some() {
+                                                Some((x.coord.to_tuple().unwrap(), x.winrate))
+                                            } else {
+                                                None
+                                            }
+                                        }).find(|x| x.0 == p.as_coord_tuple());
+                                        if let Some(point) = coord {
+                                            let mut points = data.winrate_points.lock().unwrap();
+                                            points.push((self.current_move_number as f32, match data.turn {
+                                                Player::Black => (1.0 - point.1) * 100.0,
+                                                Player::White => point.1 * 100.0,
+                                            }));
+                                        }
+                                    }
+                                }
                             }
+                            // reset analyze info
+                            {
+                                let mut info = data.analyze_info.lock().unwrap();
+                                *info = None;
+                            }
+                            // tell the engine to play the move
+                            let mut engine = data.engine.lock().unwrap();
+                            let mut turn = data.turn.clone();
+                            turn.next();
+                            engine.send_command(format!("play {} {}", turn, p).as_str().parse().unwrap()).unwrap();
+                            engine.discard_info();
+
+                            //increment move numbers
+                            self.current_move_number += 1;
+                            if self.current_move_number > self.total_move_number {
+                                self.total_move_number += 1;
+                            }
+                            // paint the goban
                             let state = data.engine_state.lock().unwrap();
-                            match state.state() {
-                                crate::EngineStateState::Analyzing => { engine.send_command(COMMAND_ANALYZE.clone()).unwrap(); },
-                                crate::EngineStateState::Idle => (),
-                            }
                             ctx.request_paint();
+                            match state.state() {
+                                crate::EngineStateState::Analyzing => {
+                                    engine.send_command(COMMAND_ANALYZE.clone()).unwrap();
+                                },
+                                _ => (),
+                            }
                         }
                     }
                 }
@@ -261,6 +319,7 @@ impl Widget<crate::RootState> for Goban {
                         }
                         let mut engine = data.engine.lock().unwrap();
                         engine.send_command(COMMAND_UNDO.clone()).unwrap();
+                        engine.discard_info();
                         let state = data.engine_state.lock().unwrap();
                         match state.state() {
                             crate::EngineStateState::Analyzing => { engine.send_command(COMMAND_ANALYZE.clone()).unwrap(); },
@@ -281,6 +340,7 @@ impl Widget<crate::RootState> for Goban {
                         };
                         let mut engine = data.engine.lock().unwrap();
                         engine.send_command(format!("play {} {}", color, &self.last_move.unwrap()).parse().unwrap()).unwrap();
+                        engine.discard_info();
                         let state = data.engine_state.lock().unwrap();
                         match state.state() {
                             crate::EngineStateState::Analyzing => { engine.send_command(COMMAND_ANALYZE.clone()).unwrap(); },
@@ -304,11 +364,13 @@ impl Widget<crate::RootState> for Goban {
                             }
                             let mut engine = data.engine.lock().unwrap();
                             engine.send_command("undo".parse().unwrap()).unwrap();
+                            engine.discard_info();
                             let state = data.engine_state.lock().unwrap();
                             match state.state() {
                                 crate::EngineStateState::Analyzing => { engine.send_command(COMMAND_ANALYZE.clone()).unwrap(); },
                                 crate::EngineStateState::Idle => (),
                             }
+                            self.current_move_number -= 1;
                             ctx.request_paint();
                         }
                     },
@@ -325,11 +387,13 @@ impl Widget<crate::RootState> for Goban {
                             };
                             let mut engine = data.engine.lock().unwrap();
                             engine.send_command(format!("play {} {}", color, &self.last_move.unwrap()).parse().unwrap()).unwrap();
+                            engine.discard_info();
                             let state = data.engine_state.lock().unwrap();
                             match state.state() {
                                 crate::EngineStateState::Analyzing => { engine.send_command(COMMAND_ANALYZE.clone()).unwrap(); },
                                 crate::EngineStateState::Idle => (),
                             }
+                            self.current_move_number += 1;
                             ctx.request_paint();
                         }
                     },
@@ -403,6 +467,8 @@ impl Widget<crate::RootState> for Goban {
                     self.hover = None;
                     self.last_move = None;
                     self.ko = None;
+                    let mut engine = data.engine.lock().unwrap();
+                    engine.send_command(COMMAND_CLEARBOARD.clone()).unwrap();
                 } else if s.get(druid::commands::CLOSE_WINDOW).is_some() {
                    log::debug!("Hey");
                 } else if s.get(crate::selectors::DRAW_ANALYZE).is_some() {

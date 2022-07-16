@@ -76,6 +76,7 @@ pub struct RootState {
     pub engine_state: Arc<Mutex<rust_fsm::StateMachine<EngineState>>>,
     pub analyze_info: Arc<Mutex<Option<libgtp::Info>>>,
     pub analyze_timer_token: Arc<Option<druid::TimerToken>>,
+    winrate_points: Arc<Mutex<Vec<(f32, f32)>>>,
 }
 
 impl RootState {
@@ -174,6 +175,7 @@ fn main() {
             engine_state: Arc::new(Mutex::new(rust_fsm::StateMachine::new())),
             analyze_info: Arc::new(Mutex::new(None)),
             analyze_timer_token: Arc::new(None),
+            winrate_points: Arc::new(Mutex::new(vec![])),
         })
         .expect("failed to launch app");
 }
