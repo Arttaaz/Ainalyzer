@@ -11,8 +11,7 @@ pub enum HistoryError {
 }
 
 
-//TODO: from sgf_parser::GameTree
-//      into sgf_parser::GameTree
+//TODO: into sgf_parser::GameTree
 #[derive(Debug, Clone)]
 pub struct History {
     pub moves: Graph<Move, (), Directed>,
@@ -71,32 +70,26 @@ impl From<GameTree> for History {
     // The sgf loading from must only contain valid moves
     fn from(t: GameTree) -> Self {
         log::debug!("start loading sgf");
-        let mut goban = crate::goban::Goban::default();
-        let mut history = Self::default();
-        let mut turn = Player::Black;
-        history.game_info = t.nodes.first().unwrap().clone();
-        history.add_tree_to_history(t, &mut turn, &mut goban);
-        history.current_index = 0.into();
+        let mut goban = crate::Goban::default();
+        goban.history.game_info = t.nodes.first().unwrap().clone();
+        History::add_tree_to_history(t, &mut goban);
+        goban.history.current_index = 0.into();
         log::debug!("finished loading sgf");
-        history
+        goban.history
     }
 }
 
 impl History {
 
-    fn add_tree_to_history(&mut self, tree: GameTree, turn: &mut Player, goban: &mut crate::Goban) -> usize {
+    fn add_tree_to_history(tree: GameTree, goban: &mut crate::Goban) -> usize {
         let mut counter = 0;
         for n in tree.nodes {
             for t in n.tokens {
                 match t {
-                    sgf_parser::SgfToken::Move { color, action } => {
+                    sgf_parser::SgfToken::Move { color: _, action } => {
                         if let sgf_parser::Action::Move(x, y) = action {
-                            *turn = match color {
-                                sgf_parser::Color::Black => Player::Black,
-                                sgf_parser::Color::White => Player::White,
-                            };
-                            let stone = match turn.clone() { Player::White => Stone::white(), Player::Black => Stone::black() };
-                            goban.play(self, turn, Point::new(x as u32 - 1, y as u32 - 1), stone);
+                            let stone = match goban.turn.clone() { Player::White => Stone::white(), Player::Black => Stone::black() };
+                            crate::Goban::play(goban, Point::new(x as u32 - 1, y as u32 - 1), stone);
                             counter += 1;
                         }
                     },
@@ -109,9 +102,9 @@ impl History {
         #[allow(unused_assignments)]
         let mut counter2 = 0;
         for v in tree.variations {
-            counter2 = self.add_tree_to_history(v, turn, goban);
+            counter2 = History::add_tree_to_history(v, goban);
             for _ in 0..counter2 {
-                goban.previous_state(self, turn);
+                goban.previous_state();
             }
         }
         counter

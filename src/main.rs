@@ -1,12 +1,11 @@
 #[macro_use] extern crate lazy_static;
 
-use std::sync::{Arc, Mutex};
 use std::io::Write;
 use log::info;
-use druid::widget::Flex;
-use druid::{AppLauncher, AppDelegate, Data, DelegateCtx, Event, Env, Handled, KbKey, KeyEvent, Lens, LocalizedString, Widget, WindowDesc, WindowId};
-
-mod dialogs;
+use iced::{executor, Application, Command, Element, Settings, window};
+use iced_native::{Event, keyboard::KeyCode};
+use iced::widget::{column, row};
+use native_dialog::FileDialog;
 
 mod engine;
 use engine::Engine;
@@ -15,16 +14,9 @@ mod goban;
 use goban::Goban;
 
 mod history;
-use history::History;
-
-mod selectors;
 mod engine_commands;
 
-const HORIZONTAL_WIDGET_SPACING: f64 = 0.01; // Flex factor
-const VERTICAL_WIDGET_SPACING: f64 = 20.0;
-const WINDOW_TITLE: LocalizedString<RootState> = LocalizedString::new("AInalyzer!");
-
-#[derive(Debug, Clone, Copy, Data, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Player {
     Black,
     White,
@@ -57,6 +49,15 @@ impl Into<sgf_parser::Color> for Player {
     }
 }
 
+impl Into<iced::Color> for Player {
+    fn into(self) -> iced::Color {
+        match self {
+            Self::Black => iced::Color::BLACK,
+            Self::White => iced::Color::WHITE,
+        }
+    }
+}
+
 // State machine
 rust_fsm::state_machine! {
     derive(Debug, Clone)
@@ -66,129 +67,227 @@ rust_fsm::state_machine! {
     Analyzing(StopAnalyze) => Idle,
 }
 
-#[derive(Clone, Data, Lens)]
-pub struct RootState {
-    text: String,
-    pub turn: Player,
-    pub history: Arc<Box<History>>,
-    pub path: Option<String>,
-    pub engine: Arc<Mutex<libgtp::Controller>>,
-    pub engine_state: Arc<Mutex<rust_fsm::StateMachine<EngineState>>>,
-    pub analyze_info: Arc<Mutex<Option<libgtp::Info>>>,
-    pub analyze_timer_token: Arc<Option<druid::TimerToken>>,
+#[derive(Debug, Clone)]
+pub enum GobanEvent {
+    Play(goban::Point, goban::Stone),
+    PreviousState,
+    NextState,
 }
 
-impl RootState {
-    pub fn is_file_updated(&self) -> bool {
-        if let Some(path) = &self.path {
-            let file = std::fs::read_to_string(std::path::PathBuf::from(path)).expect("couldn't open file");
-            let sgf: String = self.history.into_game_tree().into();
-            
-            file == sgf
-        } else {
-            false
-        }
+#[derive(Debug, Clone)]
+pub enum EngineCommand {
+    EnginePlay(Player, goban::Point),
+    EngineUndo,
+}
+
+#[derive(Debug, Clone)]
+pub enum Message {
+    Event(iced_native::Event),
+    Goban(GobanEvent),
+    EngineError,
+    EngineTick(std::time::Instant),
+    EngineCommand(EngineCommand),
+    StartAnalyze,
+    RefreshAnalyze,
+    StopAnalyze,
+    OpenFile(std::path::PathBuf),
+    DialogCancel,
+}
+
+struct Ainalyzer {
+    engine: Engine,
+    engine_state: rust_fsm::StateMachine<EngineState>,
+    goban: Goban,
+    opened_file: Option<std::path::PathBuf>,
+}
+
+impl Application for Ainalyzer {
+    type Executor = executor::Default;
+    type Message = Message;
+    type Flags = ();
+    type Theme = iced::theme::Theme;
+
+    fn new(_flags: ()) -> (Self, Command<Self::Message>) {
+        (Self {
+            engine: Engine::new(),
+            engine_state: rust_fsm::StateMachine::new(),
+            goban: Goban::default(),
+            opened_file: None,
+        }, Command::none())
     }
-}
 
-struct Delegate;
+    fn title(&self) -> String {
+        String::from("AInalyzer")
+    }
 
-impl AppDelegate<RootState> for Delegate {
-    fn event(&mut self, ctx: &mut DelegateCtx, _window_id: WindowId, event: Event, data: &mut RootState, _env: &Env) -> Option<Event> {
-        match event.clone() {
-            Event::KeyUp(KeyEvent {
-                key: code,
-                ..
-            }) => match code {
-                KbKey::Character(s) if *s == "q".to_string() => {
-                    ctx.submit_command(druid::commands::QUIT_APP);
-                    Some(event)
-                },
-                /*I want the code to open files here but apparently it doesn't work when the
-                * command is sent here */
-                //KbKey::Character(s) if *s == "o".to_string() => {
-                //    ctx.submit_command(druid::Command::new(druid::commands::SHOW_OPEN_PANEL, druid::FileDialogOptions::new(), druid::Target::Auto));
-                //    debug!("hello");
-                //    Some(event)
-                //},
-                _ => Some(event),
-            },
-            Event::Timer(t) => {
-                if data.analyze_timer_token.is_some() {
-                    if data.analyze_timer_token.unwrap() == t {
-                        ctx.submit_command(selectors::ANALYZE_TIMER_TOKEN);
-                        ctx.submit_command(selectors::DRAW_ANALYZE);
-                    }
+    fn theme(&self) -> Self::Theme {
+        Self::Theme::Dark
+    }
+
+    fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
+        match message {
+            Message::Event(event) => {
+                match event {
+                    Event::Keyboard(iced_native::keyboard::Event::KeyReleased{ key_code, ..}) => {
+                        match key_code {
+                            KeyCode::Q => return window::close(),
+                            KeyCode::O => {
+                                return Command::perform(async move {
+                                    FileDialog::new().show_open_single_file().expect("Open dialog failed")
+                                }, |message| {
+                                    match message {
+                                        Some(m) => Message::OpenFile(m),
+                                        None => Message::DialogCancel,
+                                    }
+                                })
+                            },
+                            KeyCode::N => {
+                                self.goban = Goban::default();
+                            }
+                            KeyCode::S => {
+                                match &self.opened_file {
+                                    Some(path) => {
+                                        let file = std::fs::OpenOptions::new()
+                                            .write(true)
+                                            .create(true)
+                                            .open(path.clone())
+                                            .expect("couldn't create/open file");
+
+                                        let mut bufw = std::io::BufWriter::new(file);
+                                        let sgf: String = self.goban.history.into_game_tree().into();
+                                        bufw.write_all(sgf.as_bytes()).expect("couldn't write to file");
+                                    },
+                                    None => {
+                                        let path = FileDialog::new().show_save_single_file().expect("Save dialog failed");
+                                        match path {
+                                            Some(p) => {
+                                                self.opened_file = Some(p.clone());
+                                                let file = std::fs::OpenOptions::new()
+                                                    .write(true)
+                                                    .create(true)
+                                                    .open(p)
+                                                    .expect("couldn't create/open file");
+
+                                                let mut bufw = std::io::BufWriter::new(file);
+                                                let sgf: String = self.goban.history.into_game_tree().into();
+                                                bufw.write_all(sgf.as_bytes()).expect("couldn't write to file");
+                                            },
+                                            None => (),
+                                        }
+                                    }
+                                }
+                            },
+                            KeyCode::W => {
+                                self.engine.ownership = !self.engine.ownership;
+                            }
+                            _ => (),
+                        }
+                    },
+                    _ => (),
                 }
-                Some(event)
             },
-            _ => Some(event),
-        }
+            Message::StartAnalyze => {
+                match self.engine_state.state() {
+                    EngineStateState::Idle => {
+                        let _ = self.engine_state.consume(&EngineStateInput::StartAnalyze);
+                        self.engine.start_analyze();
+                    },
+                    EngineStateState::Analyzing => (),
+                }
+            },
+            Message::RefreshAnalyze => {
+                match self.engine_state.state() {
+                    EngineStateState::Analyzing => {
+                        self.engine.start_analyze();
+                    },
+                    EngineStateState::Idle => (),
+                }
+            },
+            Message::StopAnalyze => {
+                match self.engine_state.state() {
+                    EngineStateState::Analyzing => {
+                        let _ = self.engine_state.consume(&EngineStateInput::StopAnalyze);
+                        self.engine.stop_analyze();
+                    },
+                    EngineStateState::Idle => (),
+                }
+            },
+            Message::EngineTick(_) => {
+                match self.engine.get_info() {
+                    Some(info) => { self.goban.analyze_info = Some(goban::AnalyzeInfo(info)); dbg!(&self.goban.analyze_info);},
+                    None => (),
+                }
+                let _ = self.update(Self::Message::RefreshAnalyze);
+            },
+            Message::EngineError => (),
+            Message::OpenFile(path) => {
+                let sgf = std::fs::read_to_string(path).expect("failed to load sgf");
+                let game = sgf_parser::parse(sgf.as_str()).expect("failed to parse sgf");
+                self.goban = Goban::default();
+                self.goban.history = history::History::from(game);
+            },
+            Message::EngineCommand(c) => {
+                match c {
+                    EngineCommand::EnginePlay(t, p) => {
+                        match self.engine.play(t, p) {
+                            Ok(answer) => match answer {
+                                libgtp::Answer::Failure(f) => {
+                                    log::error!("{:?}", f);
+                                    self.goban.previous_state();
+                                },
+                                _ => (),
+                            },
+                            Err(e) => {
+                                log::error!("{}", e);
+                                self.goban.previous_state();
+                            }
+                        }
+                    },
+                    EngineCommand::EngineUndo => self.engine.undo(),
+                }
+            },
+            Message::Goban(_) => match self.goban.update(message) {
+                Some(c) => {
+                    let _ = self.update(c);
+                },
+                None => (),
+            },
+            _ => (),
+        };
+        Command::none()
     }
 
-    fn command(&mut self, _ctx: &mut DelegateCtx, _target: druid::Target, cmd: &druid::Command, data: &mut RootState, _env: &Env) -> Handled {
-        if let Some(file) = cmd.get(druid::commands::OPEN_FILE) {
-            data.path = Some(file.path().to_str().unwrap().to_string());
-            let sgf = std::fs::read_to_string(file.path()).expect("failed to load sgf");
-            let game = sgf_parser::parse(sgf.as_str()).expect("failed to parse sgf");
-            data.history = Arc::new(Box::new(History::from(game)));
-            Handled::No
-        } else if let Some(file) = cmd.get(druid::commands::SAVE_FILE_AS) {
-            data.path = Some(file.path().to_str().unwrap().to_owned());
-
-            let file = std::fs::OpenOptions::new()
-                .write(true)
-                .create(true)
-                .open(data.path.clone().unwrap())
-                .expect("couldn't create/open file");
-
-            let mut bufw = std::io::BufWriter::new(file);
-            let sgf: String = data.history.into_game_tree().into();
-            bufw.write_all(sgf.as_bytes()).expect("couldn't write to file");
-            Handled::Yes
-        } else if let Some(_) = cmd.get(druid::commands::CLOSE_WINDOW) {
-            log::debug!("hey");
-            Handled::No
-        } else {
-            Handled::No
+    fn subscription(&self) -> iced::Subscription<Self::Message> {
+        match self.engine_state.state() {
+            EngineStateState::Analyzing => {
+                let timer = iced::time::every(engine_commands::TIMER_INTERVAL)
+                    .map(Message::EngineTick);
+                let runtime = iced_native::subscription::events().map(Message::Event);
+                iced::Subscription::batch(vec![timer, runtime])
+            },
+            _ => iced_native::subscription::events().map(Message::Event),
         }
+        
+    }
+
+    fn view(&self) -> Element<Self::Message> {
+        row!(self.engine.view(), column!(self.goban.view())
+            .spacing(10)
+            .padding(10)
+            .align_items(iced::Alignment::Center)
+        )
+        .spacing(10)
+        .padding(10)
+        .align_items(iced::Alignment::Center)
+        .into()
+        
     }
 }
 
 fn main() {
     scrub_log::init().unwrap();
     info!("Starting the app");
-    let main_window = WindowDesc::new(build_root_widget())
-        .title(WINDOW_TITLE)
-        .with_min_size((400.0, 400.0))
-        .window_size((1280.0, 720.0));
-
-    AppLauncher::with_window(main_window)
-        .delegate(Delegate)
-        .launch(RootState{
-            text: "AInalyzer".to_string(),
-            turn: Player::Black,
-            history: Arc::new(Box::new(History::default())),
-            path: None,
-            engine: Arc::new(Mutex::new(Engine::engine_startup())),
-            engine_state: Arc::new(Mutex::new(rust_fsm::StateMachine::new())),
-            analyze_info: Arc::new(Mutex::new(None)),
-            analyze_timer_token: Arc::new(None),
-        })
-        .expect("failed to launch app");
-}
-
-fn build_root_widget() -> impl Widget<RootState> {
-    let layout = Flex::column()
-        .with_spacer(VERTICAL_WIDGET_SPACING)
-        .with_flex_child(Goban::default(), 1.0)
-        .with_spacer(VERTICAL_WIDGET_SPACING);
-
-    Flex::row()
-        .with_flex_spacer(HORIZONTAL_WIDGET_SPACING)
-        .with_flex_child(Engine::build_engine_tab(), 0.2)
-        .with_flex_spacer(HORIZONTAL_WIDGET_SPACING)
-        .with_flex_child(layout, 1.0)
-        .with_flex_spacer(HORIZONTAL_WIDGET_SPACING)
-
+    let mut settings = Settings::default();
+    settings.antialiasing = true;
+    Ainalyzer::run(settings).unwrap();
 }
