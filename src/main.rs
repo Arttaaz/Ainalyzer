@@ -67,7 +67,7 @@ rust_fsm::state_machine! {
     Analyzing(StopAnalyze) => Idle,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum GobanEvent {
     Play(goban::Point, goban::Stone),
     PreviousState,
@@ -99,6 +99,7 @@ struct Ainalyzer {
     engine_state: rust_fsm::StateMachine<EngineState>,
     goban: Goban,
     opened_file: Option<std::path::PathBuf>,
+    file_updated: bool,
 }
 
 impl Application for Ainalyzer {
@@ -113,11 +114,19 @@ impl Application for Ainalyzer {
             engine_state: rust_fsm::StateMachine::new(),
             goban: Goban::default(),
             opened_file: None,
+            file_updated: true,
         }, Command::none())
     }
 
     fn title(&self) -> String {
-        String::from("AInalyzer")
+        let mut title = match &self.opened_file {
+            Some(path) => format!("AInalyzer - {}", path.file_name().unwrap().to_str().unwrap().to_owned()),
+            None => String::from("AInalyzer"),
+        };
+        if !self.file_updated {
+            title.push('*');
+        }
+        title
     }
 
     fn theme(&self) -> Self::Theme {
@@ -128,59 +137,79 @@ impl Application for Ainalyzer {
         match message {
             Message::Event(event) => {
                 match event {
-                    Event::Keyboard(iced_native::keyboard::Event::KeyReleased{ key_code, ..}) => {
-                        match key_code {
-                            KeyCode::Q => return window::close(),
-                            KeyCode::O => {
-                                return Command::perform(async move {
-                                    FileDialog::new().show_open_single_file().expect("Open dialog failed")
-                                }, |message| {
-                                    match message {
-                                        Some(m) => Message::OpenFile(m),
-                                        None => Message::DialogCancel,
-                                    }
-                                })
-                            },
-                            KeyCode::N => {
-                                self.goban = Goban::default();
-                            }
-                            KeyCode::S => {
-                                match &self.opened_file {
-                                    Some(path) => {
-                                        let file = std::fs::OpenOptions::new()
-                                            .write(true)
-                                            .create(true)
-                                            .open(path.clone())
-                                            .expect("couldn't create/open file");
-
-                                        let mut bufw = std::io::BufWriter::new(file);
-                                        let sgf: String = self.goban.history.into_game_tree().into();
-                                        bufw.write_all(sgf.as_bytes()).expect("couldn't write to file");
-                                    },
-                                    None => {
-                                        let path = FileDialog::new().show_save_single_file().expect("Save dialog failed");
-                                        match path {
-                                            Some(p) => {
-                                                self.opened_file = Some(p.clone());
-                                                let file = std::fs::OpenOptions::new()
-                                                    .write(true)
-                                                    .create(true)
-                                                    .open(p)
-                                                    .expect("couldn't create/open file");
-
-                                                let mut bufw = std::io::BufWriter::new(file);
-                                                let sgf: String = self.goban.history.into_game_tree().into();
-                                                bufw.write_all(sgf.as_bytes()).expect("couldn't write to file");
-                                            },
-                                            None => (),
-                                        }
+                    Event::Keyboard(iced_native::keyboard::Event::KeyReleased{ key_code, modifiers}) => {
+                        if modifiers.is_empty() {
+                            match key_code {
+                                KeyCode::Q => return window::close(),
+                                KeyCode::W => {
+                                    self.engine.ownership = !self.engine.ownership;
+                                },
+                                KeyCode::Space => {
+                                    match self.engine_state.state() {
+                                        EngineStateState::Idle => {
+                                            let _ = self.update(Message::StartAnalyze);
+                                        },
+                                        EngineStateState::Analyzing => {
+                                            let _ = self.update(Message::StopAnalyze);
+                                        },
                                     }
                                 }
-                            },
-                            KeyCode::W => {
-                                self.engine.ownership = !self.engine.ownership;
+                                _ => (),
                             }
-                            _ => (),
+                        } else if modifiers.control() {
+                            match key_code {
+                                KeyCode::O => {
+                                        return Command::perform(async move {
+                                            FileDialog::new().show_open_single_file().expect("Open dialog failed")
+                                        }, |message| {
+                                            match message {
+                                                Some(m) => Message::OpenFile(m),
+                                                None => Message::DialogCancel,
+                                            }
+                                        })
+                                },
+                                KeyCode::N => {
+                                    self.goban = Goban::default();
+                                    self.opened_file = None;
+                                    self.file_updated = true;
+                                }
+                                KeyCode::S => {
+                                    match &self.opened_file {
+                                        Some(path) => {
+                                            let file = std::fs::OpenOptions::new()
+                                                .write(true)
+                                                .create(true)
+                                                .open(path.clone())
+                                                .expect("couldn't create/open file");
+
+                                            let mut bufw = std::io::BufWriter::new(file);
+                                            let sgf: String = self.goban.history.into_game_tree().into();
+                                            bufw.write_all(sgf.as_bytes()).expect("couldn't write to file");
+                                            self.file_updated = true;
+                                        },
+                                        None => {
+                                            let path = FileDialog::new().show_save_single_file().expect("Save dialog failed");
+                                            match path {
+                                                Some(p) => {
+                                                    self.opened_file = Some(p.clone());
+                                                    let file = std::fs::OpenOptions::new()
+                                                        .write(true)
+                                                        .create(true)
+                                                        .open(p)
+                                                        .expect("couldn't create/open file");
+
+                                                    let mut bufw = std::io::BufWriter::new(file);
+                                                    let sgf: String = self.goban.history.into_game_tree().into();
+                                                    bufw.write_all(sgf.as_bytes()).expect("couldn't write to file");
+                                                    self.file_updated = true;
+                                                },
+                                                None => (),
+                                            }
+                                        }
+                                    }
+                                },
+                                _ => (),
+                            }
                         }
                     },
                     _ => (),
@@ -221,10 +250,12 @@ impl Application for Ainalyzer {
             },
             Message::EngineError => (),
             Message::OpenFile(path) => {
-                let sgf = std::fs::read_to_string(path).expect("failed to load sgf");
+                let sgf = std::fs::read_to_string(path.clone()).expect("failed to load sgf");
                 let game = sgf_parser::parse(sgf.as_str()).expect("failed to parse sgf");
+                self.opened_file = Some(path);
                 self.goban = Goban::default();
                 self.goban.history = history::History::from(game);
+                self.file_updated = true;
             },
             Message::EngineCommand(c) => {
                 match c {
@@ -246,11 +277,20 @@ impl Application for Ainalyzer {
                     EngineCommand::EngineUndo => self.engine.undo(),
                 }
             },
-            Message::Goban(_) => match self.goban.update(message) {
-                Some(c) => {
-                    let _ = self.update(c);
-                },
-                None => (),
+            Message::Goban(e) => {
+                match &e {
+                    GobanEvent::Play(_, _) => {
+                        self.file_updated = false;
+                    },
+                    _ => (),
+                }
+
+                match self.goban.update(message) {
+                    Some(c) => {
+                        let _ = self.update(c);
+                    },
+                    None => (),
+                }
             },
             _ => (),
         };

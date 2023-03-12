@@ -38,7 +38,7 @@ impl Point {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Stone {
     pub visible: bool,
     pub color: Player,
@@ -465,6 +465,24 @@ impl<'a> canvas::Program<Message> for Goban {
                         iced::mouse::Button::Right => (),
                         _ => (),
                     },
+                    iced::mouse::Event::WheelScrolled { delta } => {
+                        match delta {
+                            iced::mouse::ScrollDelta::Lines { x: _, y } => {
+                                if y > 0.0 {
+                                    return (canvas::event::Status::Captured, Some(Message::Goban(crate::GobanEvent::NextState)))
+                                } else if y < 0.0 {
+                                    return (canvas::event::Status::Captured, Some(Message::Goban(crate::GobanEvent::PreviousState)))
+                                }
+                            },
+                            iced::mouse::ScrollDelta::Pixels { x: _, y } => {
+                                if y > 0.0 {
+                                    return (canvas::event::Status::Captured, Some(Message::Goban(crate::GobanEvent::NextState)))
+                                } else if y < 0.0 {
+                                    return (canvas::event::Status::Captured, Some(Message::Goban(crate::GobanEvent::PreviousState)))
+                                }
+                            },
+                        }
+                    }
                     _ => (),
                 },
                 canvas::Event::Keyboard(ev) => match ev {
