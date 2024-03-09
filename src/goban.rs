@@ -106,11 +106,20 @@ pub struct AnalyzeInfo(pub Info);
 
 impl AnalyzeInfo {
     #[allow(dead_code)]
-    fn max_winrate(&self) -> f32 {
+    pub fn max_winrate(&self) -> f32 {
         self.0.explored_moves.iter()
             .filter(|x| x.coord.to_tuple().is_some())
             .map(|x| x.winrate * 100.0)
             .max_by_key(|x| (x * 1000.0) as u64).unwrap()
+    }
+
+    fn winrate_of(&self, turn: Player, p: Point) -> Option<f32> {
+        if let Some(mov) = self.0.explored_moves.iter()
+                            .find(|x| x.coord.to_tuple().is_some() && x.coord.to_tuple().unwrap() == p.as_coord_tuple()) {
+            Some(if turn == Player::Black {mov.winrate} else {1.0 - mov.winrate} * 100.0)
+        } else {
+            None
+        }
     }
 
     fn draw(&self, frame: &mut canvas::Frame, rect: &Rectangle, size: f32, player: Player) {
@@ -264,7 +273,7 @@ impl Goban {
         } else {
             rect.height
         };
-        let point = iced::Point::new(rect.center_x() - size/2.0, rect.center_y() - size/2.0);
+        let point = iced::Point::new((rect.width - size)/2.0, (rect.height - size) / 2.0);
         let square = Rectangle::new(point, iced::Size { width: size, height: size });
         let pos = Point::new((((position.x - square.x) / (size/20.0)-0.0).round() - 1.0) as u32,
                              (((position.y - size/40.0 - square.y) / (size/20.0)+0.45).round() - 1.0) as u32);
@@ -292,6 +301,7 @@ impl Goban {
 
 impl Goban {
     pub fn update(&mut self, message: crate::Message) -> Option<Message> {
+        let analyze_info = self.analyze_info.clone();
         self.analyze_info = None;
         match message {
             Message::Goban(event) => match event {
@@ -301,11 +311,23 @@ impl Goban {
                     } else {
                         self.play(p, s);
                     }
-                    return Some(Message::EngineCommand(crate::EngineCommand::EnginePlay(match self.turn { Player::Black => Player::White, Player::White => Player::Black}, p)))
+                    let winrate = if analyze_info.is_some() {
+                        let mut pred_turn = self.turn;
+                        pred_turn.next();
+                        if let Some(w) = analyze_info.unwrap().winrate_of(pred_turn, p) {
+                            Some((self.current_move_number as u64, w))
+                        } else {
+                            None
+                        }
+                    }
+                    else {
+                        None
+                    };
+                    return Some(Message::EngineCommand(crate::EngineCommand::EnginePlay(match self.turn { Player::Black => Player::White, Player::White => Player::Black}, p, winrate)))
                 },
                 GobanEvent::NextState => {
                     if self.next_state() {
-                        return Some(Message::EngineCommand(crate::EngineCommand::EnginePlay(match self.turn { Player::Black => Player::White, Player::White => Player::Black}, self.last_move.unwrap())))
+                        return Some(Message::EngineCommand(crate::EngineCommand::EnginePlay(match self.turn { Player::Black => Player::White, Player::White => Player::Black}, self.last_move.unwrap(), None)))
                     }
                 },
                 GobanEvent::PreviousState => {
@@ -339,7 +361,8 @@ impl<'a> canvas::Program<Message> for Goban {
         } else {
             bounds.height
         };
-        let point = iced::Point::new(bounds.center_x() - square_size/2.0, bounds.center_y() - square_size/2.0);
+        //let point = iced::Point::new(bounds.center_x() - square_size/2.0, bounds.center_y() - square_size/2.0);
+        let point = iced::Point::new((bounds.width - square_size)/2.0, (bounds.height - square_size) / 2.0);
         let square = Path::rectangle(point, iced::Size { width: square_size, height: square_size });
 
         // fill Goban background
@@ -468,16 +491,16 @@ impl<'a> canvas::Program<Message> for Goban {
                     iced::mouse::Event::WheelScrolled { delta } => {
                         match delta {
                             iced::mouse::ScrollDelta::Lines { x: _, y } => {
-                                if y > 0.0 {
+                                if y < 0.0 {
                                     return (canvas::event::Status::Captured, Some(Message::Goban(crate::GobanEvent::NextState)))
-                                } else if y < 0.0 {
+                                } else if y > 0.0 {
                                     return (canvas::event::Status::Captured, Some(Message::Goban(crate::GobanEvent::PreviousState)))
                                 }
                             },
                             iced::mouse::ScrollDelta::Pixels { x: _, y } => {
-                                if y > 0.0 {
+                                if y < 0.0 {
                                     return (canvas::event::Status::Captured, Some(Message::Goban(crate::GobanEvent::NextState)))
-                                } else if y < 0.0 {
+                                } else if y > 0.0 {
                                     return (canvas::event::Status::Captured, Some(Message::Goban(crate::GobanEvent::PreviousState)))
                                 }
                             },

@@ -16,6 +16,9 @@ use goban::Goban;
 mod history;
 mod engine_commands;
 
+mod winrate_plot;
+use winrate_plot::WinratePlot;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Player {
     Black,
@@ -76,7 +79,7 @@ pub enum GobanEvent {
 
 #[derive(Debug, Clone)]
 pub enum EngineCommand {
-    EnginePlay(Player, goban::Point),
+    EnginePlay(Player, goban::Point, Option<(u64, f32)>),
     EngineUndo,
 }
 
@@ -98,6 +101,7 @@ struct Ainalyzer {
     engine: Engine,
     engine_state: rust_fsm::StateMachine<EngineState>,
     goban: Goban,
+    winrate_plot: WinratePlot,
     opened_file: Option<std::path::PathBuf>,
     file_updated: bool,
 }
@@ -113,6 +117,7 @@ impl Application for Ainalyzer {
             engine: Engine::new(),
             engine_state: rust_fsm::StateMachine::new(),
             goban: Goban::default(),
+            winrate_plot: WinratePlot::new(),
             opened_file: None,
             file_updated: true,
         }, Command::none())
@@ -243,7 +248,16 @@ impl Application for Ainalyzer {
             },
             Message::EngineTick(_) => {
                 match self.engine.get_info() {
-                    Some(info) => { self.goban.analyze_info = Some(goban::AnalyzeInfo(info)); dbg!(&self.goban.analyze_info);},
+                    Some(info) => {
+                        self.goban.analyze_info = Some(goban::AnalyzeInfo(info));
+                        let winrate = self.goban.analyze_info.as_ref().unwrap().max_winrate();
+                        let winrate = if self.goban.turn == Player::Black {
+                            100.0 - winrate
+                        } else {
+                            winrate
+                        };
+                        self.winrate_plot.update_plot((self.goban.current_move_number as u64, winrate));
+                    },
                     None => (),
                 }
                 let _ = self.update(Self::Message::RefreshAnalyze);
@@ -259,8 +273,8 @@ impl Application for Ainalyzer {
             },
             Message::EngineCommand(c) => {
                 match c {
-                    EngineCommand::EnginePlay(t, p) => {
-                        match self.engine.play(t, p) {
+                    EngineCommand::EnginePlay(t, p, w) => {
+                        match self.engine.play(t, p, w) {
                             Ok(answer) => match answer {
                                 libgtp::Answer::Failure(f) => {
                                     log::error!("{:?}", f);
@@ -311,16 +325,27 @@ impl Application for Ainalyzer {
     }
 
     fn view(&self) -> Element<Self::Message> {
-        row!(self.engine.view(), column!(self.goban.view())
-            .spacing(10)
-            .padding(10)
-            .align_items(iced::Alignment::Center)
+        let left_column = column!(self.winrate_plot.view().explain(iced::Color::from_rgb(1.0, 0.0, 0.0)),
+            iced::widget::vertical_space(iced::Length::FillPortion(1)),
+            self.engine.view(),
+            iced::widget::vertical_space(iced::Length::FillPortion(5)))
+                .width(iced::Length::FillPortion(1))
+                .height(iced::Length::FillPortion(6));
+
+        row!(
+            left_column,
+            column!(self.goban.view())
+                .spacing(0)
+                .padding(30)
+                .width(iced::Length::FillPortion(2))
+                .align_items(iced::Alignment::Center)
         )
-        .spacing(10)
-        .padding(10)
+        .spacing(0)
+        .padding(0)
+        .width(iced::Length::Fill)
+        .height(iced::Length::Fill)
         .align_items(iced::Alignment::Center)
         .into()
-        
     }
 }
 
