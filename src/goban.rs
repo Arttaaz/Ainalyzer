@@ -3,9 +3,11 @@ use crate::history::*;
 use crate::Message;
 use crate::GobanEvent;
 use std::collections::HashSet;
+use iced::Renderer;
 use libgtp::model::Info;
 use iced::{widget::canvas, Rectangle, Element};
-use iced::widget::canvas::Path;
+use iced::widget::canvas::{Path, Gradient, gradient::Linear};
+use iced::mouse::Cursor;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Point {
@@ -80,8 +82,8 @@ impl Stone {
         let size_stone = size/20.0;
         let radius = size/41.8;
         let color = match self.color {
-            Player::Black => iced::Color::new(0.0, 0.0, 0.0, 0.7),
-            Player::White => iced::Color::new(1.0, 1.0, 1.0, 0.7),
+            Player::Black => iced::Color::from_rgba(0.0, 0.0, 0.0, 0.7),
+            Player::White => iced::Color::from_rgba(1.0, 1.0, 1.0, 0.7),
         };
         (Path::circle(iced::Point {x: rect.x + (coord.x + 1) as f32 * size_stone ,y:  rect.y + (coord.y + 1) as f32 * size_stone}, radius),
          color.into())
@@ -92,8 +94,8 @@ impl Stone {
         let size_stone = size/20.0;
         let radius = size/70.0;
         let color = match self.color {
-            Player::Black => iced::Color::new(0.0, 0.0, 0.0, 0.7),
-            Player::White => iced::Color::new(1.0, 1.0, 1.0, 0.7),
+            Player::Black => iced::Color::from_rgba(0.0, 0.0, 0.0, 0.7),
+            Player::White => iced::Color::from_rgba(1.0, 1.0, 1.0, 0.7),
         };
         //(Path::circle((rect.x0 + (coord.x+1) as f64 * size/20.0, rect.y0 + (coord.y+1) as f64 * size/20.0), size/70.0), &Color::BLACK.with_alpha(0.5)),
         (Path::circle(iced::Point {x: rect.x + (coord.x + 1) as f32 * size_stone ,y:  rect.y + (coord.y + 1) as f32 * size_stone}, radius),
@@ -148,60 +150,27 @@ impl AnalyzeInfo {
             .map(|x| (x.visits, (x.coord.to_tuple().unwrap())))
             .max_by_key(|x| x.0).unwrap();
 
-        let gradiant_pos = canvas::gradient::Position::Relative {
-            top_left: iced::Point { x: rect.x + (max_winrate.1.0) as f32 * size/20.0 - size/40.0, y: rect.y + (max_winrate.1.1) as f32 * size/20.0 - size/40.0 },
-            size: iced::Size { width: size/20.0, height: size/20.0 },
-            start: canvas::gradient::Location::TopLeft,
-            end: canvas::gradient::Location::BottomRight,
-        };
-        let gradiant = canvas::Gradient::linear(gradiant_pos)
-            .add_stop(0.0, iced::color!(0, 0, 0, 0.0))
-            .add_stop(0.5, iced::Color::from_rgba(0.0, 1.0, 0.0, 0.6))
-            .add_stop(1.0, iced::color!(0, 0, 0, 0.0))
-            .build().expect("failed to create gradiant");
-        frame.fill(&Path::circle(iced::Point { x: rect.x + (max_winrate.1.0) as f32 * size/20.0, y: rect.y + (max_winrate.1.1) as f32 * size/20.0 }, size/40.0), gradiant);
+        frame.fill(&Path::circle(iced::Point { x: rect.x + (max_winrate.1.0) as f32 * size/20.0, y: rect.y + (max_winrate.1.1) as f32 * size/20.0 }, size/40.0), iced::color!(0, 255, 0, 0.6));
 
-        let gradiant_pos = canvas::gradient::Position::Relative {
-            top_left: iced::Point { x: rect.x + (max_visits.1.0) as f32 * size/20.0 - size/40.0, y: rect.y + (max_visits.1.1) as f32 * size/20.0 - size/40.0 },
-            size: iced::Size { width: size/20.0, height: size/20.0 },
-            start: canvas::gradient::Location::TopRight,
-            end: canvas::gradient::Location::BottomLeft,
-        };
-        let gradiant = canvas::Gradient::linear(gradiant_pos)
-            .add_stop(0.0, iced::color!(0, 0, 0, 0.0))
-            .add_stop(0.5, iced::color!(7, 109, 252, 0.6))
-            .add_stop(1.0, iced::color!(0, 0, 0, 0.0))
-            .build().expect("failed to create gradiant");
-        frame.fill(&Path::circle(iced::Point { x: rect.x + (max_visits.1.0) as f32 * size/20.0, y: rect.y + (max_visits.1.1) as f32 * size/20.0 }, size/40.0), gradiant);
+        frame.fill(&Path::circle(iced::Point { x: rect.x + (max_visits.1.0) as f32 * size/20.0, y: rect.y + (max_visits.1.1) as f32 * size/20.0 }, size/40.0), iced::color!(7, 109, 252, 0.6));
 
         self.0.explored_moves.iter().for_each(|move_info| {
             let point = move_info.coord.to_tuple();
             if let Some((x, y)) = point {
                 if ((x, y) != max_winrate.1) && ((x, y) != max_visits.1) {
-                    let gradiant_pos = canvas::gradient::Position::Relative {
-                        top_left: iced::Point { x: rect.x + (x) as f32 * size/20.0 - size/40.0, y: rect.y + (y) as f32 * size/20.0 - size/40.0 },
-                        size: iced::Size { width: size/20.0, height: size/20.0 },
-                        start: canvas::gradient::Location::TopRight,
-                        end: canvas::gradient::Location::BottomLeft,
-                    };
-                    let gradiant = canvas::Gradient::linear(gradiant_pos)
-                        .add_stop(0.0, iced::color!(0, 0, 0, 0.0))
-                        .add_stop(0.5, iced::color!(255, 0, 0, 0.6))
-                        .add_stop(1.0, iced::color!(0, 0, 0, 0.0))
-                        .build().expect("failed to create gradiant");
-                    frame.fill(&Path::circle(iced::Point { x: rect.x + (x) as f32 * size/20.0, y: rect.y + (y) as f32 * size/20.0 }, size/40.0), gradiant);
+                    frame.fill(&Path::circle(iced::Point { x: rect.x + (x) as f32 * size/20.0, y: rect.y + (y) as f32 * size/20.0 }, size/40.0), iced::Color::from_rgba(1.0, 0.0, 0.0, 0.6));
                 }
 
                 let mut text = canvas::Text::default();
                 text.content = format!("{:^4.1}%", move_info.winrate * 100.0);
-                text.size = size/69.0;
-                text.horizontal_alignment = iced::alignment::Horizontal::Center;
+                text.size = (size/69.0).into();
+                text.align_x = iced::alignment::Horizontal::Center.into();
                 text.position = iced::Point { x: rect.x + (x as f32) * size/20.0, y: rect.y + (y as f32 - 0.32) * size/20.0 };
                 frame.fill_text(text);
                 let mut text = canvas::Text::default();
                 text.content = format_num::format_num!("^.2s", move_info.visits as f64);
-                text.size = size/69.0;
-                text.horizontal_alignment = iced::alignment::Horizontal::Center;
+                text.size = (size/69.0).into();
+                text.align_x = iced::alignment::Horizontal::Center.into();
                 text.position = iced::Point { x: rect.x + (x as f32) * size/20.0, y: rect.y + (y as f32) * size/20.0 };
                 frame.fill_text(text);
             }
@@ -348,12 +317,13 @@ impl<'a> canvas::Program<Message> for Goban {
     fn draw(
             &self,
             state: &GobanState,
+            renderer: &Renderer,
             _theme: &iced::theme::Theme,
             bounds: Rectangle,
-            _cursor_position: canvas::Cursor,
+            _cursor_position: Cursor,
         ) -> Vec<canvas::Geometry> {
         
-        let mut frame = canvas::Frame::new(bounds.size());
+        let mut frame = canvas::Frame::new(renderer, bounds.size());
 
         // create goban square bounded by the layout
         let square_size = if bounds.height > bounds.width {
@@ -453,8 +423,8 @@ impl<'a> canvas::Program<Message> for Goban {
             let size_stone = size/20.0;
             let radius = size/60.0;
             let color = match self.turn {
-                Player::Black => iced::Color::new(0.0, 0.0, 0.0, 1.0),
-                Player::White => iced::Color::new(1.0, 1.0, 1.0, 1.0),
+                Player::Black => iced::Color::from_rgba(0.0, 0.0, 0.0, 1.0),
+                Player::White => iced::Color::from_rgba(1.0, 1.0, 1.0, 1.0),
             }; 
             let border = canvas::Stroke::default()
                 .with_color(color)
@@ -468,21 +438,24 @@ impl<'a> canvas::Program<Message> for Goban {
     fn update(
             &self,
             state: &mut GobanState,
-            event: canvas::Event,
+            event: &canvas::Event,
             bounds: Rectangle,
-            cursor: canvas::Cursor,
-        ) -> (canvas::event::Status, Option<Message>) {
-        if cursor.is_over(&bounds) {
+            cursor: Cursor,
+        ) -> Option<iced::widget::Action<Message>> {
+        if cursor.is_over(bounds) {
             match event {
                 canvas::Event::Mouse(event) => match event {
-                    iced::mouse::Event::CursorMoved { position: _ } => self.hover_update(state, &bounds, &cursor.position_in(&bounds).unwrap()),
+                    iced::mouse::Event::CursorMoved { position: _ } => {
+                        self.hover_update(state, &bounds, &cursor.position_in(bounds).unwrap());
+                        return Some(iced::widget::Action::request_redraw())
+                    },  
                     iced::mouse::Event::ButtonReleased(b) => match b {
                         iced::mouse::Button::Left => {
                             if state.hover.is_some() {
                                 let p = state.hover.as_ref().unwrap().clone();
                                 let s = Stone::new(self.turn);
                                 state.hover = None;
-                                return (canvas::event::Status::Captured, Some(Message::Goban(crate::GobanEvent::Play(p, s))))
+                                return Some(iced::widget::Action::publish(Message::Goban(crate::GobanEvent::Play(p, s))).and_capture())
                             }
                         },
                         iced::mouse::Button::Right => (),
@@ -491,17 +464,17 @@ impl<'a> canvas::Program<Message> for Goban {
                     iced::mouse::Event::WheelScrolled { delta } => {
                         match delta {
                             iced::mouse::ScrollDelta::Lines { x: _, y } => {
-                                if y < 0.0 {
-                                    return (canvas::event::Status::Captured, Some(Message::Goban(crate::GobanEvent::NextState)))
-                                } else if y > 0.0 {
-                                    return (canvas::event::Status::Captured, Some(Message::Goban(crate::GobanEvent::PreviousState)))
+                                if *y < 0.0 {
+                                    return Some(iced::widget::Action::publish(Message::Goban(crate::GobanEvent::NextState)).and_capture())
+                                } else if *y > 0.0 {
+                                    return Some(iced::widget::Action::publish(Message::Goban(crate::GobanEvent::PreviousState)).and_capture())
                                 }
                             },
                             iced::mouse::ScrollDelta::Pixels { x: _, y } => {
-                                if y < 0.0 {
-                                    return (canvas::event::Status::Captured, Some(Message::Goban(crate::GobanEvent::NextState)))
-                                } else if y > 0.0 {
-                                    return (canvas::event::Status::Captured, Some(Message::Goban(crate::GobanEvent::PreviousState)))
+                                if *y < 0.0 {
+                                    return Some(iced::widget::Action::publish(Message::Goban(crate::GobanEvent::NextState)).and_capture())
+                                } else if *y > 0.0 {
+                                    return Some(iced::widget::Action::publish(Message::Goban(crate::GobanEvent::PreviousState)).and_capture())
                                 }
                             },
                         }
@@ -509,13 +482,13 @@ impl<'a> canvas::Program<Message> for Goban {
                     _ => (),
                 },
                 canvas::Event::Keyboard(ev) => match ev {
-                    iced::keyboard::Event::KeyReleased { key_code, modifiers: _ } => {
-                        match key_code {
-                            iced::keyboard::KeyCode::Left | iced::keyboard::KeyCode::Up => {
-                                return (canvas::event::Status::Captured, Some(Message::Goban(crate::GobanEvent::PreviousState)))
+                    iced::keyboard::Event::KeyReleased { key, location: _, modifiers: _, physical_key: _, modified_key: _ } => {
+                        match key {
+                            iced::keyboard::Key::Named(iced::keyboard::key::Named::ArrowLeft) | iced::keyboard::Key::Named(iced::keyboard::key::Named::ArrowUp) => {
+                                return Some(iced::widget::Action::publish(Message::Goban(crate::GobanEvent::PreviousState)).and_capture())
                             },
-                            iced::keyboard::KeyCode::Right | iced::keyboard::KeyCode::Down => {
-                                return (canvas::event::Status::Captured, Some(Message::Goban(crate::GobanEvent::NextState)))
+                            iced::keyboard::Key::Named(iced::keyboard::key::Named::ArrowRight) | iced::keyboard::Key::Named(iced::keyboard::key::Named::ArrowDown) => {
+                                return Some(iced::widget::Action::publish(Message::Goban(crate::GobanEvent::NextState)).and_capture())
                             },
                             _ => (),
                         }
@@ -525,7 +498,7 @@ impl<'a> canvas::Program<Message> for Goban {
                 _ => (),
             }
         }
-        (canvas::event::Status::Ignored, None)
+        None
     }
 }
 

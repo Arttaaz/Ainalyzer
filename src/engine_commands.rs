@@ -4,8 +4,8 @@ use libgtp::model::*;
 pub const TIMER_INTERVAL: std::time::Duration = std::time::Duration::from_millis(100);
 
 lazy_static! {
-    pub static ref COMMAND_ANALYZE: Command = Command::new(CommandName::KataAnalyze, Some(Args::string("interval 10 ownership false maxmoves 30".to_owned())));
-    pub static ref COMMAND_ANALYZE_OWNERSHIP: Command = Command::new(CommandName::KataAnalyze, Some(Args::string("interval 10 ownership true maxmoves 30".to_owned())));
+    pub static ref COMMAND_ANALYZE: Command = Command::new(CommandName::KataAnalyze, Some(Args::string("interval 10 ownership false maxmoves 5".to_owned())));
+    pub static ref COMMAND_ANALYZE_OWNERSHIP: Command = Command::new(CommandName::KataAnalyze, Some(Args::string("interval 10 ownership true maxmoves 5".to_owned())));
     pub static ref COMMAND_RULES_JAPANESE: Command = Command::new(CommandName::KataSetRules, Some(Args::string("japanese".to_owned())));
 }
 

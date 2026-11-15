@@ -41,7 +41,7 @@ impl Engine {
         iced::widget::Column::new()
             .push(iced::widget::row!(analyze, stop).spacing(20))
             .height(iced::Length::FillPortion(1))
-            .align_items(iced::Alignment::Center)
+            .align_x(iced::Alignment::Center)
             .into()
     }
 
@@ -70,7 +70,7 @@ impl Engine {
         }
     }
 
-    pub fn play(&mut self, turn: crate::Player, p: crate::goban::Point, winrate: Option<(u64, f32)>) -> Result<libgtp::Answer, std::io::Error> {
+    pub fn play(&mut self, turn: crate::Player, p: crate::goban::Point, _winrate: Option<(u64, f32)>) -> Result<libgtp::Answer, std::io::Error> {
         let mut engine = self.controller.lock().expect("could not get engine");
         let answer = engine.send_command(format!("play {} {}", turn, p).as_str().parse().unwrap())?;
         Ok(answer)
