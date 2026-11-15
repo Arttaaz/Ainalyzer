@@ -6,7 +6,7 @@ use std::collections::HashSet;
 use iced::Renderer;
 use libgtp::model::Info;
 use iced::{widget::canvas, Rectangle, Element};
-use iced::widget::canvas::{Path, Gradient, gradient::Linear};
+use iced::widget::canvas::Path;
 use iced::mouse::Cursor;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -124,6 +124,22 @@ impl AnalyzeInfo {
         }
     }
 
+    fn max_score(&self) -> f32 {
+        self.0.explored_moves.iter()
+            .filter(|x| x.coord.to_tuple().is_some())
+            .map(|x| x.score_lead)
+            .max_by_key(|x| *x as u64).unwrap()
+    }
+
+    fn score_of(&self, turn: Player, p: Point) -> Option<f32> {
+        if let Some(mov) = self.0.explored_moves.iter()
+                            .find(|x| x.coord.to_tuple().is_some() && x.coord.to_tuple().unwrap() == p.as_coord_tuple()) {
+            Some(if turn == Player::Black {mov.score_lead} else { -mov.score_lead})
+        } else {
+            None
+        }
+    }
+
     fn draw(&self, frame: &mut canvas::Frame, rect: &Rectangle, size: f32, player: Player) {
         self.0.ownership.iter().enumerate().for_each(|(point, ownership)| {
             let mut color = if ownership.is_sign_positive() {
@@ -196,7 +212,6 @@ pub struct Goban {
     pub last_move: Option<Point>,
     pub ko: Option<Point>,
     pub current_move_number: u16,
-    pub total_move_number: u16,
     pub history: History,
     pub turn: Player,
     pub analyze_info: Option<AnalyzeInfo>,
@@ -209,7 +224,6 @@ impl Default for Goban {
             last_move: None,
             ko: None,
             current_move_number: 0,
-            total_move_number: 0,
             history: History::default(),
             turn: Player::Black,
             analyze_info: None,
@@ -331,7 +345,6 @@ impl<'a> canvas::Program<Message> for Goban {
         } else {
             bounds.height
         };
-        //let point = iced::Point::new(bounds.center_x() - square_size/2.0, bounds.center_y() - square_size/2.0);
         let point = iced::Point::new((bounds.width - square_size)/2.0, (bounds.height - square_size) / 2.0);
         let square = Path::rectangle(point, iced::Size { width: square_size, height: square_size });
 

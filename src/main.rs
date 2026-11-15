@@ -3,7 +3,7 @@
 use std::io::Write;
 use iced::keyboard::key;
 use log::info;
-use iced::{Element, Settings, Subscription, Task, keyboard};
+use iced::{Element, Settings, Subscription, Task};
 use iced::{Event, keyboard::Key};
 use iced::widget::{column, row};
 use native_dialog::FileDialog;
@@ -17,8 +17,8 @@ use goban::Goban;
 mod history;
 mod engine_commands;
 
-//mod winrate_plot;
-//use winrate_plot::WinratePlot;
+mod winrate_plot;
+use winrate_plot::WinratePlot;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Player {
@@ -102,7 +102,7 @@ struct Ainalyzer {
     engine: Engine,
     engine_state: rust_fsm::StateMachine<EngineState>,
     goban: Goban,
-//    winrate_plot: WinratePlot,
+    winrate_plot: WinratePlot,
     opened_file: Option<std::path::PathBuf>,
     file_updated: bool,
 }
@@ -113,7 +113,7 @@ impl Ainalyzer {
             engine: Engine::new(),
             engine_state: rust_fsm::StateMachine::new(),
             goban: Goban::default(),
-//            winrate_plot: WinratePlot::new(),
+            winrate_plot: WinratePlot::new(),
             opened_file: None,
             file_updated: true,
         }, Task::none())
@@ -251,13 +251,13 @@ impl Ainalyzer {
                 match self.engine.get_info() {
                     Some(info) => {
                         self.goban.analyze_info = Some(goban::AnalyzeInfo(info));
-                        //let winrate = self.goban.analyze_info.as_ref().unwrap().max_winrate();
-                        //let winrate = if self.goban.turn == Player::Black {
-                        //    100.0 - winrate
-                        //} else {
-                        //    winrate
-                        //};
-                        //self.winrate_plot.update_plot((self.goban.current_move_number as u64, winrate));
+                        let winrate = self.goban.analyze_info.as_ref().unwrap().max_winrate();
+                        let winrate = if self.goban.turn == Player::Black {
+                            winrate
+                        } else {
+                            100.0 - winrate
+                        };
+                        self.winrate_plot.update_plot((self.goban.current_move_number as u64, winrate));
                     },
                     None => (),
                 }
@@ -325,14 +325,15 @@ impl Ainalyzer {
         
     }
 
-    fn view(&self) -> Element<Message> {
-        let left_column = column!(//self.winrate_plot.view().explain(iced::Color::from_rgb(1.0, 0.0, 0.0)),
-            //iced::widget::vertical_space(),
+    fn view(&self) -> Element<'_, Message> {
+        let left_column = column!(
+            iced_aksel::Chart::new(&self.winrate_plot.state)
+                .plot_data(&self.winrate_plot, "x_id", "y_id"),
+            iced::widget::space::vertical(),
             self.engine.view(),
-            //iced::widget::vertical_space())
-            //    .width(iced::Length::FillPortion(1))
-            //    .height(iced::Length::FillPortion(6));
-        );
+            iced::widget::space::vertical())
+                .width(iced::Length::FillPortion(1))
+                .height(iced::Length::FillPortion(6));
 
         row!(
             left_column,
