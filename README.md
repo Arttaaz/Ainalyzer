@@ -5,10 +5,9 @@ Ainalyzer is an app designed to help you review game with any open-source AI tha
 
 ## State
 
-This is still in its early stage and for the moment you can't use any AI yet.
-
 Some basic sgf editing tools are working (open/save sgf, variations).
 
+As well as basic AI move estimation.
 
 ## Controls
 
@@ -19,6 +18,8 @@ Some basic sgf editing tools are working (open/save sgf, variations).
 `s` save the current sgf
 
 `n` new file
+
+`space` starts AI analysing
 
 Use the left and right arrows and/or the mouse wheel to traverse the sgf.
 
